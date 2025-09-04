@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+{% block content %}
+<script>
+function toggleSection(id) {
+  var el = document.getElementById(id);
+  var isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? '' : 'none';
+  // Save state to localStorage
+  localStorage.setItem('section_' + id, isHidden ? 'shown' : 'hidden');
+}
+
+// On page load, restore section visibility
+window.addEventListener('DOMContentLoaded', function() {
+  ['managers_section', 'accounts_section', 'budget_section', 'actuals_section'].forEach(function(id) {
+    var el = document.getElementById(id);
+    var state = localStorage.getItem('section_' + id);
+    if (state === 'hidden') {
+      el.style.display = 'none';
+    } else {
+      el.style.display = '';
+    }
+  });
+});
+</script>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <section class="col-span-1 bg-white p-4 rounded-xl shadow">
+    <h2 class="font-semibold mb-2 flex items-center justify-between">
+      Managers
+      <button type="button" onclick="toggleSection('managers_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>
+    </h2>
+    <div id="managers_section">
+      <form method="post" action="/managers/create" class="flex gap-2 mb-3">
+        <input class="border rounded p-2 flex-1" name="name" placeholder="First Last" required />
+        <button class="bg-blue-600 text-white px-3 rounded">Add</button>
+      </form>
+      <ul class="space-y-1">
+        {% for m in managers|sort(attribute='name') %}
+        <li class="flex items-center justify-between">
+          {% if edit_manager and edit_manager.id == m.id %}
+            <form method="post" action="/managers/edit/{{m.id}}" class="flex gap-2">
+              <input class="border rounded p-2 flex-1" name="name" value="{{m.name}}" required />
+              <button class="bg-blue-600 text-white px-3 rounded">Save</button>
+            </form>
+          {% else %}
+            <span>{{ m.name }}</span>
+            <div>
+              <a href="/managers/edit/{{m.id}}" class="text-blue-600 underline mr-2">Edit</a>
+              <form method="post" action="/managers/delete/{{m.id}}" style="display:inline" onsubmit="return confirm('Delete manager?')">
+                <button class="text-red-600">Delete</button>
+              </form>
+            </div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  <section class="col-span-2 bg-white p-4 rounded-xl shadow">
+    <h2 class="font-semibold mb-2 flex items-center justify-between">
+      Accounts
+      <button type="button" onclick="toggleSection('accounts_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>
+    </h2>
+    <div id="accounts_section">
+      <form method="post" action="/accounts/create" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+        <input class="border rounded p-2" name="key" placeholder="52100-03-31-01-01" required />
+        <input class="border rounded p-2 md:col-span-2" name="description" placeholder="Description" required />
+        <select class="border rounded p-2" name="manager_id">
+          <option value="">(no manager)</option>
+          {% for m in managers|sort(attribute='name') %}
+            <option value="{{m.id}}">{{m.name}}</option>
+          {% endfor %}
+        </select>
+        <div class="md:col-span-4 text-right">
+          <button class="bg-blue-600 text-white px-3 py-1 rounded">Add Account</button>
+        </div>
+      </form>
+      <table class="w-full text-sm">
+        <thead><tr class="text-left border-b">
+          <th class="py-1">Key</th><th>Description</th><th>Manager</th><th></th>
+        </tr></thead>
+        <tbody>
+          {% for a in accounts|sort(attribute='key') %}
+          {% if edit_account and edit_account.id == a.id %}
+          <tr class="border-b">
+            <form method="post" action="/accounts/edit/{{a.id}}" class="contents">
+              <td><label for="edit_key_{{a.id}}" class="sr-only">Key</label><input id="edit_key_{{a.id}}" class="border rounded p-2" name="key" value="{{a.key}}" required /></td>
+              <td><label for="edit_desc_{{a.id}}" class="sr-only">Description</label><input id="edit_desc_{{a.id}}" class="border rounded p-2" name="description" value="{{a.description}}" required /></td>
+              <td>
+                <label for="edit_mgr_{{a.id}}" class="sr-only">Manager</label>
+                <select id="edit_mgr_{{a.id}}" class="border rounded p-2" name="manager_id">
+                  <option value="">(no manager)</option>
+                  {% for m in managers|sort(attribute='name') %}
+                    <option value="{{m.id}}" {% if a.manager_id == m.id %}selected{% endif %}>{{m.name}}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td class="text-right">
+                <button class="bg-blue-600 text-white px-3 py-1 rounded">Save</button>
+              </td>
+            </form>
+          </tr>
+          {% else %}
+          <tr class="border-b">
+            <td class="py-1">{{a.key}}</td>
+            <td>{{a.description}}</td>
+            <td>
+              {% set m = managers|selectattr('id','equalto',a.manager_id)|first %}
+              {{ m.name if m else '' }}
+            </td>
+            <td class="text-right">
+              <a href="/accounts/edit/{{a.id}}" class="text-blue-600 underline mr-2">Edit</a>
+              <form method="post" action="/accounts/delete/{{a.id}}" style="display:inline" onsubmit="return confirm('Delete account?')">
+                <button class="text-red-600">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="bg-white p-4 rounded-xl shadow mt-6">
+    <h2 class="font-semibold mb-2 flex items-center justify-between">
+      Add Budget Line
+      <button type="button" onclick="toggleSection('budget_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>
+    </h2>
+    <div id="budget_section">
+      <form method="post" action="/budget/create" class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
+        <select id="budget_acct5" class="border rounded p-2 md:col-span-2" name="acct5" id="budget_acct" required>
+          {% for a in accounts|sort(attribute='key') %}
+            <option value="{{a.key}}">{{a.key}} — {{a.description}}</option>
+          {% endfor %}
+        </select>
+        <div class="flex gap-1">
+            <input id="budget_line" class="border rounded p-2 flex-1" name="line" id="budget_line" placeholder="01" required />
+<!--            <button type="button" class="border rounded px-2" onclick="suggestNext('budget')">Suggest</button>-->
+<!--            <button type="button" onclick="fillNextLine('budget', 'budget_acct5', 'budget_line')" class="bg-gray-200 px-2 rounded">Next</button>-->
+        </div>
+        <input class="border rounded p-2 md:col-span-2" name="description" placeholder="Description" required />
+        <input class="border rounded p-2" name="amount" type="number" step="0.01" placeholder="0.00" required />
+        <div class="md:col-span-5 text-right">
+          <button class="bg-blue-600 text-white px-3 py-1 rounded">Add Budget</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="col-span-2 bg-white p-4 rounded-xl shadow mt-6">
+    <h2 class="font-semibold mb-2 flex items-center justify-between">
+      Add Actuals Line
+      <button type="button" onclick="toggleSection('actuals_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>
+    </h2>
+    <div id="actuals_section">
+      <form method="post" action="/actuals/create" id="actuals_form" class="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
+        <select id="budget_acct5" class="border rounded p-2 md:col-span-2" name="acct5" id="actuals_acct" id="budget_acct" required>
+          {% for a in accounts|sort(attribute='key') %}
+            <option value="{{a.key}}">{{a.key}} — {{a.description}}</option>
+          {% endfor %}
+        </select>
+        <div class="flex gap-1">
+            <input id="budget_line" class="border rounded p-2 flex-1" name="line" id="actuals_line" placeholder="01" required />
+<!--            <button type="button" class="border rounded px-2" onclick="suggestNext('actuals')">Suggest</button><input type="hidden" placeholder="01" required />-->
+<!--            <button type="button" onclick="fillNextLine('budget', 'budget_acct5', 'budget_line')" class="bg-gray-200 px-2 rounded">Next</button>-->
+        </div>
+        <input class="border rounded p-2 md:col-span-2" name="description" placeholder="Description" required />
+        <input class="border rounded p-2" name="amount" type="number" step="0.01" placeholder="0.00" required />
+        <input class="border rounded p-2" name="seq" type="number" step="any" placeholder="Sequence (optional)" />
+        <input class="border rounded p-2" name="tr_date" type="text" placeholder="Date (required)" required />
+        <div class="md:col-span-5 text-right">
+          <button class="bg-blue-600 text-white px-3 py-1 rounded">Add Actual</button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<section class="bg-white p-4 rounded-xl shadow mt-6">
+  <div class="flex items-center justify-between">
+    <h2 class="font-semibold mb-2">Line Items (Budget vs Actuals)</h2>
+    <div class="space-x-2">
+      <a class="underline" href="/export/managers">Export Managers</a>
+      <a class="underline" href="/export/accounts">Export Accounts</a>
+      <a class="underline" href="/export/budget">Export Budget</a>
+      <a class="underline" href="/export/actuals">Export Actuals</a>
+    </div>
+  </div>
+  <table class="w-full text-sm">
+    <thead><tr class="text-left border-b">
+      <th class="py-1">Acct</th><th>Line</th><th>Budget</th><th>Actual</th><th>Variance</th><th>Budget Desc</th>
+    </tr></thead>
+    <tbody>
+      {% for r in items %}
+      <tr class="border-b">
+        <td class="py-1 font-mono">{{r.acct5}}</td>
+        <td class="font-mono">{{r.line}}</td>
+        <td>${{ '%.2f'|format(r.budget) }}</td>
+        <td>${{ '%.2f'|format(r.actual) }}</td>
+        <td class="{{ 'text-green-700' if r.variance>=0 else 'text-red-700' }} font-semibold">${{ '%.2f'|format(r.variance) }}</td>
+        <td>{{r.budget_desc or ''}}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="bg-white p-4 rounded-xl shadow mt-6">
+  <h2 class="font-semibold mb-2">All Actual Items</h2>
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="text-left border-b">
+        <th class="py-1">Acct</th>
+        <th>Line</th>
+        <th>Seq</th>
+        <th>Amount</th>
+        <th>Description</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for a in actuals %}
+      <tr class="border-b">
+        <td class="py-1 font-mono">{{ a.acct5 }}</td>
+        <td class="font-mono">{{ a.line }}</td>
+        <td>{{ a.seq or '' }}</td>
+        <td>${{ '%.2f'|format(a.amount) }}</td>
+        <td>{{ a.description }}</td>
+        <td>{{ a.tr_date or '' }}</td>
+        <td>
+          <a href="/actuals/edit/{{ a.id }}" class="text-blue-600 underline mr-2">Edit</a>
+          <form method="post" action="/actuals/delete/{{ a.id }}" style="display:inline" onsubmit="return confirm('Delete actual item?')">
+            <button class="text-red-600 underline" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% if edit_actual and edit_actual.id == a.id %}
+      <tr class="bg-gray-100">
+        <td colspan="7">
+          <form method="post" action="/actuals/edit/{{ edit_actual.id }}" class="grid grid-cols-1 md:grid-cols-6 gap-2">
+            <input class="border rounded p-2" name="acct5" value="{{ edit_actual.acct5 }}" required />
+            <input class="border rounded p-2" name="line" value="{{ edit_actual.line }}" required />
+            <input class="border rounded p-2" name="description" value="{{ edit_actual.description }}" required />
+            <input class="border rounded p-2" name="amount" type="number" step="0.01" value="{{ edit_actual.amount }}" required />
+            <input class="border rounded p-2" name="seq" type="number" step="any" value="{{ edit_actual.seq or '' }}" placeholder="Sequence (optional)" />
+            <input class="border rounded p-2" name="tr_date" value="{{ edit_actual.tr_date or '' }}" placeholder="Date (optional)" />
+            <button class="bg-blue-600 text-white px-3 py-1 rounded md:col-span-6" type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

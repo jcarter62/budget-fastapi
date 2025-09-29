@@ -31,6 +31,9 @@ class LineItemBase(BaseModel):
     description: str
     amount: float
     seq: Optional[float] = None
+    tr_date: Optional[str] = None
+    vendor_name: Optional[str] = None
+    vouchno: Optional[str] = None
 
 class LineItemCreate(LineItemBase):
     id: str

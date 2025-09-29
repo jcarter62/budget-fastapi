@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- Please Wait Spinner -->
+<div id="please-wait-spinner" style="position:fixed;z-index:1000;top:0;left:0;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.7);">
+  <div style="display:flex;flex-direction:column;align-items:center;">
+    <div class="loader" style="border:6px solid #f3f3f3;border-top:6px solid #3498db;border-radius:50%;width:48px;height:48px;animation:spin 1s linear infinite;"></div>
+    <div class="mt-2 text-gray-700 font-semibold">Please wait...</div>
+  </div>
+</div>
+<style>
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
+<div class="bg-white p-4 rounded-xl shadow">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold">Actuals</h2>
+    <div class="flex items-center gap-2">
+      <form id="import-form" method="post" action="/actuals/import" onsubmit="return confirm('Import actuals from SQL? New rows will be created with line=00; duplicates (ignoring line) will be skipped.');">
+        <button id="import-btn" class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
+      </form>
+      <form id="delete-all-form" method="post" action="/actuals/delete-all" onsubmit="return confirm('Delete ALL actual items? This cannot be undone.');">
+        <button id="delete-all-btn" class="bg-red-600 text-white px-3 py-1 rounded">Delete All</button>
+      </form>
+    </div>
+  </div>
+  <section class="bg-slate-50 p-3 rounded border mb-6">
+    <h3 class="font-semibold mb-2">Add Actuals Line</h3>
+    <form method="post" action="/actuals/create" class="grid grid-cols-1 md:grid-cols-6 gap-2">
+      <label class="sr-only" for="add-acct5">Account</label>
+      <select id="add-acct5" class="border rounded p-2 md:col-span-2" name="acct5" required>
+        {% for a in accounts|sort(attribute='key') %}
+          <option value="{{a.key}}">{{a.key}} — {{a.description}}</option>
+        {% endfor %}
+      </select>
+      <label class="sr-only" for="add-line">Line</label>
+      <input id="add-line" class="border rounded p-2" name="line" placeholder="01" required />
+      <label class="sr-only" for="add-description">Description</label>
+      <input id="add-description" class="border rounded p-2 md:col-span-2" name="description" placeholder="Description" required />
+      <label class="sr-only" for="add-amount">Amount</label>
+      <input id="add-amount" class="border rounded p-2" name="amount" type="number" step="0.01" placeholder="0.00" required />
+      <label class="sr-only" for="add-seq">Sequence</label>
+      <input id="add-seq" class="border rounded p-2" name="seq" type="number" step="any" placeholder="Sequence (optional)" />
+      <label class="sr-only" for="add-tr_date">Date</label>
+      <input id="add-tr_date" class="border rounded p-2" name="tr_date" type="text" placeholder="Date (required)" required />
+      <label class="sr-only" for="add-vendor">Vendor</label>
+      <input id="add-vendor" class="border rounded p-2 md:col-span-2" name="vendor_name" type="text" placeholder="Vendor (optional)" />
+      <label class="sr-only" for="add-vouch">Vouch No</label>
+      <input id="add-vouch" class="border rounded p-2 md:col-span-2" name="vouchno" type="text" placeholder="Vouch No (optional)" />
+      <div class="md:col-span-6 text-right">
+        <button class="bg-blue-600 text-white px-3 py-1 rounded">Add Actual</button>
+      </div>
+    </form>
+  </section>
+  <h3 class="font-semibold mb-2">All Actual Items</h3>
+  <div class="mb-4 flex flex-wrap gap-4 items-end">
+    <div>
+      <label for="filter-gl" class="block text-xs text-gray-600">Account</label>
+      <select id="filter-gl" class="border rounded p-2 w-full">
+        <option value="">(All)</option>
+        {% for a in accounts|sort(attribute='key') %}
+          <option value="{{a.key}}">{{a.key}} — {{a.description}}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="filter-desc" class="block text-xs text-gray-600">Description contains</label>
+      <input id="filter-desc" type="text" class="border rounded p-2 w-full" placeholder="search description" />
+    </div>
+    <div>
+      <label for="filter-vendor" class="block text-xs text-gray-600">Vendor contains</label>
+      <input id="filter-vendor" type="text" class="border rounded p-2 w-full" placeholder="search vendor" />
+    </div>
+    <div>
+      <label for="filter-manager" class="block text-xs text-gray-600">Manager</label>
+      <select id="filter-manager" class="border rounded p-2 w-full">
+        <option value="">(All)</option>
+        {% for m in managers|sort(attribute='name') %}
+          <option value="{{ m.id }}">{{ m.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button id="clear-filters" class="ml-2 px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200">Clear</button>
+  </div>
+  <table class="w-full text-sm" id="actuals-table">
+    <thead>
+      <tr class="text-left border-b">
+        <th class="py-1" data-key="acct5">Acct</th>
+        <th data-key="line">Line</th>
+        <th data-key="amount">Amount</th>
+        <th data-key="description">Description</th>
+        <th data-key="tr_date">Date</th>
+        <th data-key="vendor_name">Vendor</th>
+        <th data-key="manager">Manager</th>
+        <th data-key="vouchno">Vouch No</th>
+      </tr>
+    </thead>
+    <tbody id="actuals-tbody">
+      <!-- Rows will be rendered here by JS -->
+    </tbody>
+  </table>
+</div>
+<!-- Voucher lines modal -->
+<div id="voucherModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black bg-opacity-50">
+  <div class="bg-white rounded-lg shadow-lg w-[90vw] overflow-auto max-h-[80vh]">
+    <div class="flex items-center justify-between p-4 border-b">
+      <h3 id="voucherModalTitle" class="text-lg font-semibold">Voucher Lines</h3>
+      <div class="flex items-center gap-3">
+        <button id="voucherModalClose" type="button" class="text-gray-600 hover:text-gray-900">Close</button>
+      </div>
+    </div>
+    <div class="p-4">
+      <div id="voucherModalContent">Loading...</div>
+    </div>
+  </div>
+</div>
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+  var spinner = document.getElementById('please-wait-spinner');
+  var tbody = document.getElementById('actuals-tbody');
+  var filterGL = document.getElementById('filter-gl');
+  var filterDesc = document.getElementById('filter-desc');
+  var filterVendor = document.getElementById('filter-vendor');
+  var filterManager = document.getElementById('filter-manager');
+  var clearBtn = document.getElementById('clear-filters');
+  var managerMap = {};
+  {% for m in managers %}
+    managerMap["{{m.id}}"] = "{{m.name}}";
+  {% endfor %}
+
+  function saveFilters() {
+    localStorage.setItem('actuals.filterGL', filterGL.value);
+    localStorage.setItem('actuals.filterDesc', filterDesc.value);
+    localStorage.setItem('actuals.filterVendor', filterVendor.value);
+    localStorage.setItem('actuals.filterManager', filterManager.value);
+  }
+  function restoreFilters() {
+    filterGL.value = localStorage.getItem('actuals.filterGL') || '';
+    filterDesc.value = localStorage.getItem('actuals.filterDesc') || '';
+    filterVendor.value = localStorage.getItem('actuals.filterVendor') || '';
+    filterManager.value = localStorage.getItem('actuals.filterManager') || '';
+  }
+  function buildQuery() {
+    var params = [];
+    if (filterGL.value) params.push('acct5=' + encodeURIComponent(filterGL.value));
+    if (filterDesc.value) params.push('description=' + encodeURIComponent(filterDesc.value));
+    if (filterVendor.value) params.push('vendor=' + encodeURIComponent(filterVendor.value));
+    if (filterManager.value) params.push('manager=' + encodeURIComponent(filterManager.value));
+    return params.length ? ('?' + params.join('&')) : '';
+  }
+  function renderRows(items) {
+    tbody.innerHTML = '';
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-gray-500">No actual items found.</td></tr>';
+      return;
+    }
+    items.forEach(function(r) {
+      var tr = document.createElement('tr');
+      tr.className = 'border-b';
+      var vouchCell = '';
+      if (r.vouchno) {
+        vouchCell = `<a href="#" class="voucher-link text-blue-700 underline" data-vouch="${r.vouchno}">${r.vouchno}</a>`;
+      } else {
+        vouchCell = '';
+      }
+      tr.innerHTML = `
+        <td class="py-1 font-mono">${r.acct5}</td>
+        <td class="font-mono">${r.line}</td>
+        <td>$${parseFloat(r.amount).toFixed(2)}</td>
+        <td>${r.description || ''}</td>
+        <td>${r.tr_date || ''}</td>
+        <td>${r.vendor_name || ''}</td>
+        <td>${managerMap[r.manager_id] || ''}</td>
+        <td>${vouchCell}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    // Attach click handlers to voucher links
+    tbody.querySelectorAll('.voucher-link').forEach(function(el) {
+      el.addEventListener('click', function(ev) {
+        ev.preventDefault();
+        var vouchno = this.getAttribute('data-vouch');
+        if (!vouchno) return;
+        showVoucherModal(vouchno);
+      });
+    });
+  }
+  function fetchAndRender() {
+    if (spinner) spinner.style.display = '';
+    var url = '/api/actual-items' + buildQuery();
+    fetch(url)
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        renderRows(data);
+        if (spinner) spinner.style.display = 'none';
+      })
+      .catch(function(err) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-red-600">Failed to load data.</td></tr>';
+        if (spinner) spinner.style.display = 'none';
+      });
+  }
+  filterGL.addEventListener('change', function() { saveFilters(); fetchAndRender(); });
+  filterDesc.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
+  filterVendor.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
+  filterManager.addEventListener('change', function() { saveFilters(); fetchAndRender(); });
+  clearBtn.addEventListener('click', function() {
+    filterGL.value = '';
+    filterDesc.value = '';
+    filterVendor.value = '';
+    filterManager.value = '';
+    saveFilters();
+    fetchAndRender();
+  });
+  restoreFilters();
+  fetchAndRender();
+
+  // Modal logic
+  var voucherModal = document.getElementById('voucherModal');
+  var voucherModalContent = document.getElementById('voucherModalContent');
+  var voucherModalTitle = document.getElementById('voucherModalTitle');
+  document.getElementById('voucherModalClose').onclick = function() {
+    voucherModal.classList.add('hidden');
+    voucherModalContent.innerHTML = '';
+  };
+  voucherModal.onclick = function(e) {
+    if (e.target === voucherModal) {
+      voucherModal.classList.add('hidden');
+      voucherModalContent.innerHTML = '';
+    }
+  };
+  function showVoucherModal(vouchno) {
+    voucherModal.classList.remove('hidden');
+    voucherModalTitle.textContent = 'Voucher ' + vouchno;
+    voucherModalContent.innerHTML = 'Loading...';
+    fetch('/voucher-lines?vouchno=' + encodeURIComponent(vouchno))
+      .then(function(resp) { return resp.text(); })
+      .then(function(html) {
+        voucherModalContent.innerHTML = html;
+      })
+      .catch(function(err) {
+        voucherModalContent.textContent = String(err);
+      });
+  }
+});
+</script>
+{% endblock %}

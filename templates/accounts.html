@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block content %}
+<script>
+function toggleSection(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? '' : 'none';
+  localStorage.setItem('section_' + id, isHidden ? 'shown' : 'hidden');
+}
+window.addEventListener('DOMContentLoaded', function() {
+  ['accounts_section'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var state = localStorage.getItem('section_' + id);
+    el.style.display = (state === 'hidden') ? 'none' : '';
+  });
+});
+</script>
+
+{% if error_message %}
+<div class="mb-4 p-3 rounded bg-red-100 text-red-800 border border-red-200">
+  Import failed: {{ error_message }}
+</div>
+{% endif %}
+{% if import_summary %}
+<div class="mb-4 p-3 rounded bg-green-100 text-green-800 border border-green-200">
+  Import complete: {{ import_summary.total }} rows processed — created {{ import_summary.created }}, updated {{ import_summary.updated }}.
+</div>
+{% endif %}
+
+<div class="flex items-center justify-between mb-4">
+  <h2 class="text-lg font-semibold">Accounts</h2>
+  <div class="flex gap-2">
+    <form method="post" action="/accounts/import" onsubmit="return confirm('Import accounts from SQL? This will add new accounts and update descriptions of existing ones.');">
+      <button class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
+    </form>
+    <form method="post" action="/accounts/delete-all" onsubmit="return confirm('Delete ALL accounts? This cannot be undone.');">
+      <button class="bg-red-600 text-white px-3 py-1 rounded">Delete All Accounts</button>
+    </form>
+  </div>
+</div>
+
+<section class="bg-white p-4 rounded-xl shadow">
+  <h2 class="font-semibold mb-2 flex items-center justify-between">
+    Manage Accounts
+    <button type="button" onclick="toggleSection('accounts_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>
+  </h2>
+  <div id="accounts_section">
+    <form method="post" action="/accounts/create" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+      <input class="border rounded p-2" name="key" placeholder="52100-03-31-01-01" required />
+      <input class="border rounded p-2 md:col-span-2" name="description" placeholder="Description" required />
+      <select class="border rounded p-2" name="manager_id">
+        <option value="">(no manager)</option>
+        {% for m in managers|sort(attribute='name') %}
+          <option value="{{m.id}}">{{m.name}}</option>
+        {% endfor %}
+      </select>
+      <div class="md:col-span-4 text-right">
+        <button class="bg-blue-600 text-white px-3 py-1 rounded">Add Account</button>
+      </div>
+    </form>
+    <table class="w-full text-sm" id="accounts-table">
+      <thead>
+        <tr>
+          <th><input type="text" id="filter-gl" class="border rounded p-1 w-full" placeholder="Filter GL" /></th>
+          <th><input type="text" id="filter-desc" class="border rounded p-1 w-full" placeholder="Filter Description" /></th>
+          <th>
+            <select id="filter-manager" class="border rounded p-1 w-full">
+              <option value="">All Managers</option>
+              {% for m in managers|sort(attribute='name') %}
+                <option value="{{m.id}}">{{m.name}}</option>
+              {% endfor %}
+            </select>
+          </th>
+          <th></th>
+        </tr>
+        <tr class="text-left border-b">
+          <th class="py-1">GL Account</th><th>Description</th><th>Manager</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in accounts|sort(attribute='key') %}
+        {% if edit_account and edit_account.id == a.id %}
+        <tr class="border-b">
+          <form method="post" action="/accounts/edit/{{a.id}}" class="contents">
+            <td><label for="edit_key_{{a.id}}" class="sr-only">GL Account</label><input id="edit_key_{{a.id}}" class="border rounded p-2" name="key" value="{{a.key}}" required /></td>
+            <td><label for="edit_desc_{{a.id}}" class="sr-only">Description</label><input id="edit_desc_{{a.id}}" class="border rounded p-2" name="description" value="{{a.description}}" required /></td>
+            <td>
+              <label for="edit_mgr_{{a.id}}" class="sr-only">Manager</label>
+              <select id="edit_mgr_{{a.id}}" class="border rounded p-2" name="manager_id">
+                <option value="">(no manager)</option>
+                {% for m in managers|sort(attribute='name') %}
+                  <option value="{{m.id}}" {{ 'selected' if a.manager_id == m.id else '' }}>{{m.name}}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td class="text-right">
+              <button class="bg-blue-600 text-white px-3 py-1 rounded">Save</button>
+            </td>
+          </form>
+        </tr>
+        {% else %}
+        <tr class="border-b" data-gl="{{a.key|lower}}" data-desc="{{a.description|lower}}" data-manager="{{a.manager_id or ''}}">
+          <td class="py-1">{{a.key}}</td>
+          <td>{{a.description}}</td>
+          <td>
+            {% set m = managers|selectattr('id','equalto',a.manager_id)|first %}
+            {{ m.name if m else '' }}
+          </td>
+          <td class="text-right">
+            <a href="/accounts/edit/{{a.id}}" class="text-blue-600 underline mr-2">Edit</a>
+            <form method="post" action="/accounts/delete/{{a.id}}" style="display:inline" onsubmit="return confirm('Delete account?')">
+              <button class="text-red-600">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      var glInput = document.getElementById('filter-gl');
+      var descInput = document.getElementById('filter-desc');
+      var mgrSelect = document.getElementById('filter-manager');
+      var table = document.getElementById('accounts-table');
+      // Restore filter values from localStorage
+      var savedGl = localStorage.getItem('accounts.filter.gl') || '';
+      var savedDesc = localStorage.getItem('accounts.filter.desc') || '';
+      var savedMgr = localStorage.getItem('accounts.filter.manager') || '';
+      if (glInput) glInput.value = savedGl;
+      if (descInput) descInput.value = savedDesc;
+      if (mgrSelect) mgrSelect.value = savedMgr;
+      function filterRows() {
+        var gl = (glInput.value || '').toLowerCase();
+        var desc = (descInput.value || '').toLowerCase();
+        var mgr = mgrSelect.value;
+        Array.from(table.querySelectorAll('tbody tr')).forEach(function(row) {
+          var rowGl = row.getAttribute('data-gl') || '';
+          var rowDesc = row.getAttribute('data-desc') || '';
+          var rowMgr = row.getAttribute('data-manager') || '';
+          var glOk = !gl || rowGl.includes(gl);
+          var descOk = !desc || rowDesc.includes(desc);
+          var mgrOk = !mgr || rowMgr === mgr;
+          row.style.display = (glOk && descOk && mgrOk) ? '' : 'none';
+        });
+      }
+      glInput.addEventListener('input', function() {
+        localStorage.setItem('accounts.filter.gl', glInput.value || '');
+        filterRows();
+      });
+      descInput.addEventListener('input', function() {
+        localStorage.setItem('accounts.filter.desc', descInput.value || '');
+        filterRows();
+      });
+      mgrSelect.addEventListener('change', function() {
+        localStorage.setItem('accounts.filter.manager', mgrSelect.value || '');
+        filterRows();
+      });
+      // Initial filter
+      filterRows();
+    });
+    </script>
+  </div>
+</section>
+{% endblock %}

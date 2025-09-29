@@ -1,15 +1,26 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Budget Coder</title>
+    <title>{{ appname }}</title>
     <!-- Tailwind via CDN for simplicity -->
     <script src="https://cdn.tailwindcss.com"></script>
   </head>
   <body class="bg-slate-50 text-slate-900">
     <div class="max-w-7xl mx-auto p-6">
-      <h1 class="text-2xl font-bold mb-4">Budget Coder (FastAPI + Jinja2 + SQLite)</h1>
+        <a href="/"><h1 class="text-2xl font-bold mb-4">{{appname}}</h1></a>
+      <!-- Global Menu -->
+      <nav class="mb-6">
+        <ul class="flex gap-4 text-sm">
+          <li><a class="text-blue-700 hover:underline" href="/">Home</a></li>
+          <li><a class="text-blue-700 hover:underline" href="/accounts">Accounts</a></li>
+          <li><a class="text-blue-700 hover:underline" href="/budgets">Budgets</a></li>
+          <li><a class="text-blue-700 hover:underline" href="/actuals">Actuals</a></li>
+          <li><a class="text-blue-700 hover:underline" href="/managers">Managers</a></li>
+          <li><a class="text-blue-700 hover:underline" href="/assign">Assign Manager</a></li>
+        </ul>
+      </nav>
       {% block content %}{% endblock %}
     </div>
   </body>

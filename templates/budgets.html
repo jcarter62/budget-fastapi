@@ -13,45 +13,57 @@
   100% { transform: rotate(360deg); }
 }
 </style>
-<div class="container mx-auto p-4">
-  <h1 class="text-2xl font-bold mb-4">Home - Overview</h1>
-  <div class="mb-4 flex flex-wrap gap-4 items-end">
-    <div>
-      <label for="filter-gl" class="block text-sm font-medium">GL</label>
-      <select id="filter-gl" class="border rounded px-2 py-1">
-        <option value="">All</option>
-        {% for a in accounts %}
-          <option value="{{a.key}}">{{a.key}} - {{a.description}}</option>
-        {% endfor %}
-      </select>
+<div class="bg-white p-4 rounded-xl shadow">
+  <div class="flex flex-col gap-3 mb-4">
+    <div class="flex items-center justify-between">
+      <h2 class="font-semibold">Budgets (Fast Entry)</h2>
+      <div class="flex gap-2">
+        <form method="post" action="/budgets/import" style="display:inline">
+          <button type="submit" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">Import Budgets</button>
+        </form>
+        <form method="post" action="/budgets/delete_line00" style="display:inline" onsubmit="return confirm('Delete all imported budgets (line=00)?');">
+          <button type="submit" class="border rounded px-3 bg-red-100 hover:bg-red-200">Delete Imported Budgets</button>
+        </form>
+      </div>
+      <div id="budget_toast" class="hidden text-sm px-2 py-1 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">Saved</div>
     </div>
-    <div>
-      <label for="filter-desc" class="block text-sm font-medium">Description</label>
-      <input id="filter-desc" type="text" class="border rounded px-2 py-1" placeholder="Search description...">
+    <div class="flex flex-wrap gap-4 items-end mb-2">
+      <div>
+        <label for="filter-gl" class="block text-sm font-medium">GL</label>
+        <select id="filter-gl" class="border rounded px-2 py-1">
+          <option value="">All</option>
+          {% for a in accounts %}
+            <option value="{{a.key}}">{{a.key}} - {{a.description}}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="filter-desc" class="block text-sm font-medium">Description</label>
+        <input id="filter-desc" type="text" class="border rounded px-2 py-1" placeholder="Search description...">
+      </div>
+      <div>
+        <label for="filter-manager" class="block text-sm font-medium">Manager</label>
+        <select id="filter-manager" class="border rounded px-2 py-1">
+          <option value="">All</option>
+          {% for m in managers %}
+            <option value="{{m.id}}">{{m.name}}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button id="clear-filters" class="ml-2 px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200">Clear</button>
     </div>
-    <div>
-      <label for="filter-manager" class="block text-sm font-medium">Manager</label>
-      <select id="filter-manager" class="border rounded px-2 py-1">
-        <option value="">All</option>
-        {% for m in managers %}
-          <option value="{{m.id}}">{{m.name}}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <button id="clear-filters" class="ml-2 px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200">Clear</button>
   </div>
-  <table class="min-w-full bg-white" id="items-table">
+  <table class="w-full text-sm" id="budget-table">
     <thead>
-      <tr>
-        <th>GL</th>
+      <tr class="text-left border-b">
+        <th class="py-1">GL</th>
         <th>Line</th>
         <th>Budget</th>
-        <th>Actual</th>
-        <th>Variance</th>
         <th>Description</th>
+        <th>Manager</th>
       </tr>
     </thead>
-    <tbody id="items-tbody">
+    <tbody id="budget-tbody">
       <!-- Rows will be rendered here by JS -->
     </tbody>
   </table>
@@ -59,28 +71,27 @@
 <script>
 window.addEventListener('DOMContentLoaded', function() {
   var spinner = document.getElementById('please-wait-spinner');
-  var table = document.getElementById('items-table');
-  var tbody = document.getElementById('items-tbody');
+  var tbody = document.getElementById('budget-tbody');
   var filterGL = document.getElementById('filter-gl');
   var filterDesc = document.getElementById('filter-desc');
   var filterManager = document.getElementById('filter-manager');
   var clearBtn = document.getElementById('clear-filters');
-  // Get account manager mapping for filtering
-  var accountManagerMap = {};
-  {% for a in accounts %}
-    accountManagerMap["{{a.key}}"]= "{{a.manager_id or ''}}";
+  // Build manager lookup
+  var managerMap = {};
+  {% for m in managers %}
+    managerMap["{{m.id}}"] = "{{m.name}}";
   {% endfor %}
 
   // Save/restore filters
   function saveFilters() {
-    localStorage.setItem('home.filterGL', filterGL.value);
-    localStorage.setItem('home.filterDesc', filterDesc.value);
-    localStorage.setItem('home.filterManager', filterManager.value);
+    localStorage.setItem('budgets.filterGL', filterGL.value);
+    localStorage.setItem('budgets.filterDesc', filterDesc.value);
+    localStorage.setItem('budgets.filterManager', filterManager.value);
   }
   function restoreFilters() {
-    var gl = localStorage.getItem('home.filterGL') || '';
-    var desc = localStorage.getItem('home.filterDesc') || '';
-    var mgr = localStorage.getItem('home.filterManager') || '';
+    var gl = localStorage.getItem('budgets.filterGL') || '';
+    var desc = localStorage.getItem('budgets.filterDesc') || '';
+    var mgr = localStorage.getItem('budgets.filterManager') || '';
     filterGL.value = gl;
     filterDesc.value = desc;
     filterManager.value = mgr;
@@ -96,18 +107,19 @@ window.addEventListener('DOMContentLoaded', function() {
 
   function renderRows(items) {
     tbody.innerHTML = '';
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="text-gray-500">No budget items found.</td></tr>';
+      return;
+    }
     items.forEach(function(r) {
-      var managerId = accountManagerMap[r.acct5] || '';
       var tr = document.createElement('tr');
       tr.className = 'border-b';
-      tr.setAttribute('data-manager-id', managerId);
       tr.innerHTML = `
         <td class="py-1 font-mono">${r.acct5}</td>
         <td class="font-mono">${r.line}</td>
         <td>$${parseFloat(r.budget).toFixed(2)}</td>
-        <td>$${parseFloat(r.actual).toFixed(2)}</td>
-        <td class="${r.variance >= 0 ? 'text-green-700' : 'text-red-700'} font-semibold">$${parseFloat(r.variance).toFixed(2)}</td>
         <td>${r.budget_desc || ''}</td>
+        <td>${managerMap[r.manager_id] || ''}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -115,7 +127,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
   function fetchAndRender() {
     if (spinner) spinner.style.display = '';
-    var url = '/api/line-items' + buildQuery();
+    var url = '/api/budget-items' + buildQuery();
     fetch(url)
       .then(function(response) { return response.json(); })
       .then(function(data) {
@@ -123,7 +135,7 @@ window.addEventListener('DOMContentLoaded', function() {
         if (spinner) spinner.style.display = 'none';
       })
       .catch(function(err) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-red-600">Failed to load data.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-red-600">Failed to load data.</td></tr>';
         if (spinner) spinner.style.display = 'none';
       });
   }

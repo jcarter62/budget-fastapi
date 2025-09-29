@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<script>
+function toggleSection(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var isHidden = el.style.display === 'none';
+  el.style.display = isHidden ? '' : 'none';
+  localStorage.setItem('section_' + id, isHidden ? 'shown' : 'hidden');
+}
+window.addEventListener('DOMContentLoaded', function() {
+  ['managers_section'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var state = localStorage.getItem('section_' + id);
+    el.style.display = (state === 'hidden') ? 'none' : '';
+  });
+});
+</script>
+
+<section class="bg-white p-4 rounded-xl shadow">
+  <h2 class="font-semibold mb-2 flex items-center justify-between">
+    Managers
+    <button type="button" onclick="toggleSection('managers_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>
+  </h2>
+  <div id="managers_section">
+    <form method="post" action="/managers/create" class="flex gap-2 mb-3">
+      <input class="border rounded p-2 flex-1" name="name" placeholder="First Last" required />
+      <button class="bg-blue-600 text-white px-3 rounded">Add</button>
+    </form>
+    <ul class="space-y-1">
+      {% for m in managers|sort(attribute='name') %}
+      <li class="flex items-center justify-between">
+        {% if edit_manager and edit_manager.id == m.id %}
+          <form method="post" action="/managers/edit/{{m.id}}" class="flex gap-2">
+            <input class="border rounded p-2 flex-1" name="name" value="{{m.name}}" required />
+            <label for="isdefault_{{m.id}}" class="flex items-center gap-1"> Default</label>
+            <input type="checkbox" name="isdefault" id="isdefault_{{m.id}}" {{ 'checked' if m.isdefault == 'on' else '' }} />
+            <button class="bg-blue-600 text-white px-3 rounded">Save</button>
+          </form>
+        {% else %}
+          <span>
+            {{ m.name }}
+            {{ '&nbsp;-&nbsp;Default Manager'|safe if m.isdefault == 'on' else '' }}
+          </span>
+          <div>
+            <a href="/managers/edit/{{m.id}}" class="text-blue-600 underline mr-2">Edit</a>
+            <form method="post" action="/managers/delete/{{m.id}}" style="display:inline" onsubmit="return confirm('Delete manager?')">
+              <button class="text-red-600">Delete</button>
+            </form>
+          </div>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+{% endblock %}
+

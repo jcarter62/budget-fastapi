@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <section class="bg-white p-4 rounded-xl shadow">
+    <h2 class="font-semibold mb-2">Managers</h2>
+    <p class="text-sm text-slate-600 mb-2">Drag a manager onto one account or onto multiple selected accounts.</p>
+    <ul id="managers_list" class="space-y-2">
+      {% for m in managers|sort(attribute='name') %}
+      <li class="px-3 py-2 rounded border bg-slate-50 cursor-move"
+          draggable="true"
+          data-manager-id="{{ m.id }}"
+          data-manager-name="{{ m.name }}">
+        {{ m.name }}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="lg:col-span-2 bg-white p-4 rounded-xl shadow">
+    <div class="flex flex-col gap-3 mb-3">
+      <div class="flex items-center justify-between">
+        <h2 class="font-semibold">Accounts</h2>
+        <div id="assign_toast" class="hidden text-sm px-2 py-1 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">Assigned</div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <input id="filter_text" class="border rounded p-2" placeholder="Filter by GL or Description" />
+        <select id="filter_manager" class="border rounded p-2">
+          <option value="">All managers</option>
+          <option value="__none__">Unassigned</option>
+          {% for m in managers|sort(attribute='name') %}
+          <option value="{{ m.id }}">{{ m.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="flex gap-2">
+          <button id="clear_filters" class="border rounded px-3">Clear</button>
+          <button id="clear_selection" class="border rounded px-3">Clear Selection</button>
+        </div>
+      </div>
+    </div>
+
+    <table class="w-full text-sm" id="accounts_table">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="py-1 w-8"><input type="checkbox" id="select_all" /></th>
+          <th class="py-1">GL</th>
+          <th>Description</th>
+          <th>Manager</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in accounts|sort(attribute='key') %}
+        <tr class="border-b" data-account-id="{{ a.id }}" data-key="{{ a.key|lower }}" data-desc="{{ a.description|lower }}" data-manager-id="{{ a.manager_id or '' }}">
+          <td class="py-1"><input type="checkbox" class="row-select" /></td>
+          <td class="py-1 font-mono">{{ a.key }}</td>
+          <td>{{ a.description }}</td>
+          <td class="manager-cell">
+            {% set m = managers|selectattr('id','equalto',a.manager_id)|first %}
+            <span class="inline-block px-2 py-0.5 rounded bg-slate-100 border manager-badge">{{ m.name if m else '' }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</div>
+
+<script>
+(function(){
+  var dragged = null;
+  var tbl = document.getElementById('accounts_table');
+  var filterText = document.getElementById('filter_text');
+  var filterManager = document.getElementById('filter_manager');
+  var clearFiltersBtn = document.getElementById('clear_filters');
+  var clearSelectionBtn = document.getElementById('clear_selection');
+  var selectAll = document.getElementById('select_all');
+  var toast = document.getElementById('assign_toast');
+
+  // Persist keys
+  var LS_TEXT = 'assign.filter.text';
+  var LS_MGR  = 'assign.filter.manager';
+  // Restore saved values
+  try {
+    var t = localStorage.getItem(LS_TEXT);
+    if (filterText && t !== null) filterText.value = t;
+    var m = localStorage.getItem(LS_MGR);
+    if (filterManager && m !== null) filterManager.value = m;
+  } catch (_) {}
+
+  function showToast(msg){
+    if (!toast) return;
+    toast.textContent = msg || 'Assigned';
+    toast.classList.remove('hidden');
+    setTimeout(function(){ toast.classList.add('hidden'); }, 1200);
+  }
+
+  function selectedAccountIds(){
+    return Array.from(tbl.querySelectorAll('tbody .row-select:checked')).map(function(cb){
+      var tr = cb.closest('tr');
+      return tr ? tr.getAttribute('data-account-id') : null;
+    }).filter(Boolean);
+  }
+
+  function updateRowManager(tr, managerName, managerId){
+    var badge = tr.querySelector('.manager-cell .manager-badge');
+    if (badge) {
+      badge.textContent = managerName || '';
+      badge.classList.remove('bg-slate-100','bg-red-100');
+      badge.classList.add('bg-emerald-100');
+      setTimeout(function(){ badge.classList.remove('bg-emerald-100'); badge.classList.add('bg-slate-100'); }, 600);
+    }
+    tr.setAttribute('data-manager-id', managerId || '');
+  }
+
+  function filterRows(){
+    var text = (filterText && filterText.value || '').toLowerCase().trim();
+    var mgr = (filterManager && filterManager.value) || '';
+    Array.from(tbl.querySelectorAll('tbody tr')).forEach(function(tr){
+      var key = tr.getAttribute('data-key') || '';
+      var desc = tr.getAttribute('data-desc') || '';
+      var rowMgr = tr.getAttribute('data-manager-id') || '';
+      var textOk = !text || key.includes(text) || desc.includes(text);
+      var mgrOk = !mgr || (mgr === '__none__' ? (rowMgr === '') : (rowMgr === mgr));
+      tr.style.display = (textOk && mgrOk) ? '' : 'none';
+    });
+  }
+
+  if (filterText) filterText.addEventListener('input', function(){
+    try { localStorage.setItem(LS_TEXT, filterText.value || ''); } catch(_) {}
+    filterRows();
+  });
+  if (filterManager) filterManager.addEventListener('change', function(){
+    try { localStorage.setItem(LS_MGR, filterManager.value || ''); } catch(_) {}
+    filterRows();
+  });
+  if (clearFiltersBtn) clearFiltersBtn.addEventListener('click', function(e){
+    e.preventDefault();
+    if (filterText) filterText.value = '';
+    if (filterManager) filterManager.value = '';
+    try { localStorage.removeItem(LS_TEXT); localStorage.removeItem(LS_MGR); } catch(_) {}
+    filterRows();
+  });
+
+  if (clearSelectionBtn) clearSelectionBtn.addEventListener('click', function(e){
+    e.preventDefault(); tbl.querySelectorAll('tbody .row-select:checked').forEach(function(cb){ cb.checked=false; cb.closest('tr').classList.remove('bg-blue-50'); }); selectAll.checked=false; });
+  if (selectAll) selectAll.addEventListener('change', function(){
+    var visibleRows = Array.from(tbl.querySelectorAll('tbody tr')).filter(function(tr){ return tr.style.display !== 'none'; });
+    visibleRows.forEach(function(tr){ var cb = tr.querySelector('.row-select'); if (cb) { cb.checked = selectAll.checked; tr.classList.toggle('bg-blue-50', cb.checked); } });
+  });
+
+  tbl.addEventListener('change', function(e){
+    if (e.target && e.target.classList.contains('row-select')){
+      var tr = e.target.closest('tr');
+      tr.classList.toggle('bg-blue-50', e.target.checked);
+    }
+  });
+
+  // Enable dragging on manager items
+  document.querySelectorAll('#managers_list [draggable=true]').forEach(function(el){
+    el.addEventListener('dragstart', function(e){
+      dragged = {
+        manager_id: e.target.getAttribute('data-manager-id'),
+        manager_name: e.target.getAttribute('data-manager-name')
+      };
+      e.dataTransfer.setData('text/plain', JSON.stringify(dragged));
+      e.dataTransfer.effectAllowed = 'copy';
+    });
+    el.addEventListener('dragend', function(){ dragged = null; });
+  });
+
+  // Make account rows droppable
+  document.querySelectorAll('#accounts_table tbody tr').forEach(function(row){
+    row.addEventListener('dragover', function(e){
+      if (dragged) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        row.classList.add('bg-emerald-50');
+      }
+    });
+    row.addEventListener('dragleave', function(){
+      row.classList.remove('bg-emerald-50');
+    });
+    row.addEventListener('drop', function(e){
+      e.preventDefault();
+      row.classList.remove('bg-emerald-50');
+      var data = dragged || (function(){ try { return JSON.parse(e.dataTransfer.getData('text/plain')||'{}'); } catch(_){ return {}; } })();
+      if (!data || !data.manager_id) return;
+      var managerId = data.manager_id;
+      var managerName = data.manager_name || '';
+      var ids = selectedAccountIds();
+      if (!ids.length) { ids = [ row.getAttribute('data-account-id') ]; }
+      // optimistic UI update for all ids
+      ids.forEach(function(id){
+        var tr = tbl.querySelector('tbody tr[data-account-id="'+id+'"]');
+        if (tr) updateRowManager(tr, 'Assigning...', managerId);
+      });
+      fetch('/accounts/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_ids: ids, manager_id: managerId })
+      }).then(function(res){ return res.json(); }).then(function(json){
+        if (json && json.ok) {
+          ids.forEach(function(id){
+            var tr = tbl.querySelector('tbody tr[data-account-id="'+id+'"]');
+            if (tr) updateRowManager(tr, managerName, managerId);
+          });
+          showToast('Assigned '+ids.length+' account'+(ids.length>1?'s':''));
+          filterRows();
+        } else {
+          ids.forEach(function(id){
+            var tr = tbl.querySelector('tbody tr[data-account-id="'+id+'"]');
+            if (tr) updateRowManager(tr, 'Error', null);
+          });
+          console.error('Assign error', json && json.error);
+        }
+      }).catch(function(err){
+        ids.forEach(function(id){
+          var tr = tbl.querySelector('tbody tr[data-account-id="'+id+'"]');
+          if (tr) updateRowManager(tr, 'Error', null);
+        });
+        console.error('Assign request failed', err);
+      });
+    });
+  });
+
+  // Initial filter application using restored values
+  filterRows();
+})();
+</script>
+{% endblock %}

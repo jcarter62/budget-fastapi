@@ -6,6 +6,7 @@ class Manager(Base):
     __tablename__ = "managers"
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
+    isdefault = Column(String, nullable=False, default='off')  # 'on' or 'off'
 
     accounts = relationship("Account", back_populates="manager")
 
@@ -39,4 +40,6 @@ class ActualItem(Base):
     description = Column(String, nullable=False)
     amount = Column(Float, nullable=False, default=0.0)
     seq = Column(Float, nullable=True)  # sequence number, increments by 5
+    vendor_name = Column(String, nullable=True)
+    vouchno = Column(String, nullable=True)
     #__table_args__ = (UniqueConstraint('acct5', 'line', name='uq_actual_acct5_line'),)

@@ -1,11 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from typing import List
 from sqlalchemy.orm import Session
 from db import get_db
-from models import Manager
+from data.data import Data
+import models
 import schemas
 import crud
 import csv, io
+from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/api")
 
@@ -122,6 +124,20 @@ def import_csv(kind: str, file: UploadFile = File(...), db: Session = Depends(ge
         raise HTTPException(400, "Unknown kind")
     return {"ok": True, "count": count}
 
+@router.post("/actuals/import")
+def actuals_import(request: Request, db: Session = Depends(get_db)):
+    """
+    Endpoint to import actuals. You can implement your import logic here.
+    """
+    # TODO: Implement import logic (e.g., parse uploaded file, insert records)
+    data = Data()
+    actual_items = data.load_actual_items()
+    for item in actual_items:
+        item['amount'] = float(item.get('amount') or 0)
+        crud.create_actual_item(db, schemas.LineItemCreate(**item))
+        print(f"Import: {item}")
+    return {"status": "success", "message": "Import endpoint reached."}
+
 # ---- Utility: Next line ----
 @router.get("/next-line/{kind}/{acct5}")
 def next_line(kind: str, acct5: str, db: Session = Depends(get_db)):
@@ -131,3 +147,118 @@ def next_line(kind: str, acct5: str, db: Session = Depends(get_db)):
         return {"next": crud.next_line_for_account(db, models.ActualItem, acct5)}
     else:
         raise HTTPException(400, "Unknown kind")
+
+@router.get("/actual-items")
+def api_actual_items(request: Request, db: Session = Depends(get_db)):
+    qp = request.query_params
+    acct5_filter = qp.get('acct5') or None
+    desc_filter = qp.get('description') or None
+    vendor_filter = qp.get('vendor') or None
+    manager_filter = qp.get('manager') or None
+    accounts = crud.list_accounts(db)
+    actuals = crud.list_actuals(db)
+    acct_manager_map = {a.key: a.manager_id for a in accounts}
+    items = []
+    for a in actuals:
+        if acct5_filter and a.acct5 != acct5_filter:
+            continue
+        if manager_filter and acct_manager_map.get(a.acct5) != manager_filter:
+            continue
+        if desc_filter and desc_filter.lower() not in (a.description or '').lower():
+            continue
+        if vendor_filter and vendor_filter.lower() not in (getattr(a, 'vendor_name', '') or '').lower():
+            continue
+        items.append({
+            "acct5": a.acct5,
+            "line": a.line,
+            "amount": a.amount,
+            "description": a.description,
+            "tr_date": getattr(a, 'tr_date', None),
+            "vendor_name": getattr(a, 'vendor_name', None),
+            "vouchno": getattr(a, 'vouchno', None),
+            "manager_id": acct_manager_map.get(a.acct5)
+        })
+    items.sort(key=lambda r: (r["acct5"], r["line"]))
+    return JSONResponse(content=items)
+
+@router.get("/line-items")
+def api_line_items(request: Request, db: Session = Depends(get_db)):
+    qp = request.query_params
+    acct5_filter = qp.get('acct5') or None
+    desc_filter = qp.get('description') or None
+    manager_filter = qp.get('manager') or None
+    managers = crud.list_managers(db)
+    accounts = crud.list_accounts(db)
+    budget = crud.list_budget(db)
+    actuals = crud.list_actuals(db)
+    acct_manager_map = {a.key: a.manager_id for a in accounts}
+    budget_lookup = {(b.acct5, b.line): b.description for b in budget}
+    joined = {}
+    for b in budget:
+        if acct5_filter and b.acct5 != acct5_filter:
+            continue
+        if manager_filter and acct_manager_map.get(b.acct5) != manager_filter:
+            continue
+        if desc_filter and desc_filter.lower() not in (b.description or '').lower():
+            continue
+        k = (b.acct5, b.line)
+        joined[k] = {"acct5": b.acct5, "line": b.line, "budget_desc": b.description, "budget": b.amount, "actual": 0.0, "actual_desc": None}
+    for a in actuals:
+        if acct5_filter and a.acct5 != acct5_filter:
+            continue
+        if manager_filter and acct_manager_map.get(a.acct5) != manager_filter:
+            continue
+        if desc_filter and desc_filter.lower() not in (a.description or '').lower():
+            continue
+        k = (a.acct5, a.line)
+        if k not in joined:
+            joined[k] = {
+                "acct5": a.acct5,
+                "line": a.line,
+                "budget_desc": budget_lookup.get(k),
+                "budget": 0.0,
+                "actual": a.amount,
+                "actual_desc": a.description
+            }
+        else:
+            joined[k]["actual"] += a.amount
+            joined[k]["actual_desc"] = a.description
+    items = []
+    for (acct5, line), row in joined.items():
+        items.append({
+            "acct5": acct5, "line": line,
+            "budget": row["budget"],
+            "actual": row["actual"],
+            "variance": row["budget"] - row["actual"],
+            "budget_desc": row["budget_desc"],
+            "actual_desc": row["actual_desc"],
+        })
+    items.sort(key=lambda r: (r["acct5"], r["line"]))
+    return JSONResponse(content=items)
+
+@router.get("/budget-items")
+def api_budget_items(request: Request, db: Session = Depends(get_db)):
+    qp = request.query_params
+    acct5_filter = qp.get('acct5') or None
+    desc_filter = qp.get('description') or None
+    manager_filter = qp.get('manager') or None
+    accounts = crud.list_accounts(db)
+    budget = crud.list_budget(db)
+    acct_manager_map = {a.key: a.manager_id for a in accounts}
+    items = []
+    for b in budget:
+        if acct5_filter and b.acct5 != acct5_filter:
+            continue
+        if manager_filter and acct_manager_map.get(b.acct5) != manager_filter:
+            continue
+        if desc_filter and desc_filter.lower() not in (b.description or '').lower():
+            continue
+        items.append({
+            "acct5": b.acct5,
+            "line": b.line,
+            "budget": b.amount,
+            "budget_desc": b.description,
+            "manager_id": acct_manager_map.get(b.acct5)
+        })
+    items.sort(key=lambda r: (r["acct5"], r["line"]))
+    return JSONResponse(content=items)

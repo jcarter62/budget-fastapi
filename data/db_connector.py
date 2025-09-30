@@ -75,7 +75,7 @@ class DB:
         con_str += 'DATABASE=' + self._database + ';'
         con_str += 'UID=' + self._username + ';'
         con_str += 'PWD=' + self._password + ';'
-        con_str += 'PORT=1433;ENCRYPT=NO;'
+        con_str += 'PORT=1433;ENCRYPT=NO;TrustServerCertificate=YES;'
         con_str += 'MARS_Connection=Yes;'
         return con_str
 

@@ -11,6 +11,7 @@ from fastapi import status
 from utils.middleware import ContextProcessorMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import text, select, func
+import crud
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -327,6 +328,45 @@ def actuals_edit_post(id: str,
     crud.update_actual_item(db, id, schemas.LineItemBase(acct5=acct5, line=line, description=description, amount=amount, seq=seq_val, tr_date=tr_date, vendor_name=vendor_name, vouchno=vouchno))
     return RedirectResponse("/actuals", status_code=status.HTTP_303_SEE_OTHER)
 
+@app.post("/actuals/import")
+def actuals_import(db: Session = Depends(get_db)):
+    from data import Data
+    from urllib.parse import quote_plus
+    created = 0
+    total = 0
+    try:
+        d = Data()
+        rows = d.load_actual_items() or []
+        total = len(rows)
+        for r in rows:
+            acct5 = (r.get('gl') or '').strip()
+            line = pad2(r.get('line') or '')
+            desc = (r.get('description') or '').strip()
+            amount = float(r.get('amount') or 0.0)
+            seq = r.get('seq')
+            seq_val = None if not seq else float(seq)
+            tr_date = r.get('tr_date') or None
+            vendor_name = (r.get('vendor_name') or '').strip() or None
+            vouchno = (r.get('vouchno') or '').strip() or None
+            if not acct5 or not line or not desc or amount == 0.0:
+                continue
+            crud.create_actual_item(db, schemas.LineItemCreate(
+                id=uuid4(),
+                acct5=acct5,
+                line=line,
+                description=desc,
+                amount=amount,
+                seq=seq_val,
+                tr_date=tr_date,
+                vendor_name=vendor_name,
+                vouchno=vouchno
+            ))
+            created += 1
+    except Exception as e:
+        msg = quote_plus(str(e))
+        return RedirectResponse(f"/actuals?msg={msg}", status_code=303)
+    return RedirectResponse(f"/actuals?created={created}&total={total}", status_code=303)
+
 @app.get("/api/get/gl-list", response_model=dict)
 def test1():
     from data import Data
@@ -480,3 +520,4 @@ def voucher_lines_html(request: Request, vouchno: str = None, db: Session = Depe
                                        "tax": tax,
                                        "shipping": shipping,
                                        "total_amount": total_amount,})
+

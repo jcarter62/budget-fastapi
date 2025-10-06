@@ -18,12 +18,10 @@
     <div class="flex items-center justify-between">
       <h2 class="font-semibold">Budgets (Fast Entry)</h2>
       <div class="flex gap-2">
-        <form method="post" action="/budgets/import" style="display:inline">
-          <button type="submit" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">Import Budgets</button>
-        </form>
-        <form method="post" action="/budgets/delete_line00" style="display:inline" onsubmit="return confirm('Delete all imported budgets (line=00)?');">
-          <button type="submit" class="border rounded px-3 bg-red-100 hover:bg-red-200">Delete Imported Budgets</button>
-        </form>
+        <!-- Replaced HTML form with a plain button that triggers JS fetch to /api/budgets/import -->
+        <button id="importBudets00" type="button" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">Import Budgets</button>
+        <!-- Replace delete form with JS-driven button -->
+        <button id="deleteBudgets00" type="button" class="border rounded px-3 bg-red-100 hover:bg-red-200">Delete Imported Budgets</button>
       </div>
       <div id="budget_toast" class="hidden text-sm px-2 py-1 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">Saved</div>
     </div>
@@ -76,11 +74,26 @@ window.addEventListener('DOMContentLoaded', function() {
   var filterDesc = document.getElementById('filter-desc');
   var filterManager = document.getElementById('filter-manager');
   var clearBtn = document.getElementById('clear-filters');
-  // Build manager lookup
+  var toast = document.getElementById('budget_toast');
+  var importBtn = document.getElementById('importBudets00');
+  var deleteBtn = document.getElementById('deleteBudgets00');
+  // Build manager lookup from the Manager <select> options
   var managerMap = {};
-  {% for m in managers %}
-    managerMap["{{m.id}}"] = "{{m.name}}";
-  {% endfor %}
+  Array.prototype.forEach.call(filterManager && filterManager.options || [], function(opt) {
+    if (opt.value) managerMap[opt.value] = opt.text;
+  });
+
+  function showToast(msg, isError) {
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.remove('hidden');
+    // Toggle success/error styles
+    var successClasses = ['bg-emerald-100','text-emerald-900','border-emerald-200'];
+    var errorClasses = ['bg-red-100','text-red-900','border-red-200'];
+    successClasses.concat(errorClasses).forEach(function(c){ toast.classList.remove(c); });
+    (isError ? errorClasses : successClasses).forEach(function(c){ toast.classList.add(c); });
+    setTimeout(function(){ toast.classList.add('hidden'); }, 3000);
+  }
 
   // Save/restore filters
   function saveFilters() {
@@ -129,7 +142,7 @@ window.addEventListener('DOMContentLoaded', function() {
     if (spinner) spinner.style.display = '';
     var url = '/api/budget-items' + buildQuery();
     fetch(url)
-      .then(function(response) { return response.json(); })
+      .then(function(response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); })
       .then(function(data) {
         renderRows(data);
         if (spinner) spinner.style.display = 'none';
@@ -140,7 +153,49 @@ window.addEventListener('DOMContentLoaded', function() {
       });
   }
 
+  function doImportBudgets() {
+    if (!confirm('Import budgets from source and insert into line 00?')) return;
+    if (spinner) spinner.style.display = '';
+    if (importBtn) importBtn.disabled = true;
+    fetch('/api/budgets/import', { method: 'POST' })
+      .then(function(resp) { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.json().catch(function(){ return {}; }); })
+      .then(function(data) {
+        var count = (data && (data.imported || data.count)) || 0;
+        showToast('Imported ' + count + ' budget rows');
+        fetchAndRender();
+      })
+      .catch(function(err) {
+        showToast('Import failed: ' + err.message, true);
+      })
+      .finally(function(){
+        if (spinner) spinner.style.display = 'none';
+        if (importBtn) importBtn.disabled = false;
+      });
+  }
+
+  function doDeleteBudgets() {
+    if (!confirm('Delete all imported budgets (line=00)?')) return;
+    if (spinner) spinner.style.display = '';
+    if (deleteBtn) deleteBtn.disabled = true;
+    fetch('/api/budgets/delete_line00', { method: 'POST' })
+      .then(function(resp) { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.json().catch(function(){ return {}; }); })
+      .then(function(data) {
+        var count = (data && (data.deleted || data.count)) || 0;
+        showToast('Deleted ' + count + ' imported budget rows');
+        fetchAndRender();
+      })
+      .catch(function(err) {
+        showToast('Delete failed: ' + err.message, true);
+      })
+      .finally(function(){
+        if (spinner) spinner.style.display = 'none';
+        if (deleteBtn) deleteBtn.disabled = false;
+      });
+  }
+
   // Event listeners
+  if (importBtn) importBtn.addEventListener('click', doImportBudgets);
+  if (deleteBtn) deleteBtn.addEventListener('click', doDeleteBudgets);
   filterGL.addEventListener('change', function() { saveFilters(); fetchAndRender(); });
   filterDesc.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
   filterManager.addEventListener('change', function() { saveFilters(); fetchAndRender(); });

@@ -102,17 +102,33 @@ class DB:
         """
         r = {}
         i = 0
+        # columns that should be numeric
+        numeric_cols = {'amount', 'tax', 'freight', 'total', 'total_amount', 'seq'}
         try:
             for item in row.cursor_description:
                 name = item[0]
-                val = str(row[i])
-                name = name.lower()
+                name_l = name.lower()
+                raw_val = row[i]
                 i += 1
-                r[name] = val
+                # preserve None
+                if raw_val is None:
+                    r[name_l] = None
+                    continue
+                # convert known numeric columns to float
+                if name_l in numeric_cols:
+                    try:
+                        r[name_l] = float(raw_val)
+                    except Exception:
+                        # fallback: try converting string representation
+                        try:
+                            r[name_l] = float(str(raw_val).strip() or 0.0)
+                        except Exception:
+                            r[name_l] = 0.0
+                else:
+                    # default: keep as string
+                    r[name_l] = str(raw_val)
         except DBError as err:
             print(f'Error in extract_row: {err}')
             r['error'] = f'Error in extract_row: {err}'
 
         return r
-
-

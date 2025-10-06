@@ -17,11 +17,11 @@
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-lg font-semibold">Actuals</h2>
     <div class="flex items-center gap-2">
-      <form id="import-form" method="post" action="/actuals/import" onsubmit="return confirm('Import actuals from SQL? New rows will be created with line=00; duplicates (ignoring line) will be skipped.');">
-        <button id="import-btn" class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
+      <form id="import-form">
+        <button id="import-btn" type="button" class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
       </form>
-      <form id="delete-all-form" method="post" action="/actuals/delete-all" onsubmit="return confirm('Delete ALL actual items? This cannot be undone.');">
-        <button id="delete-all-btn" class="bg-red-600 text-white px-3 py-1 rounded">Delete All</button>
+      <form id="delete-all-form">
+        <button id="delete-all-btn" type="button" class="bg-red-600 text-white px-3 py-1 rounded">Delete All Imported</button>
       </form>
     </div>
   </div>
@@ -129,6 +129,65 @@ window.addEventListener('DOMContentLoaded', function() {
     managerMap["{{m.id}}"] = "{{m.name}}";
   {% endfor %}
 
+  // --- Import button: JS-based POST instead of form submit ---
+  var importBtn = document.getElementById('import-btn');
+  var importForm = document.getElementById('import-form');
+  if (importForm) {
+    importForm.addEventListener('submit', function(e) { e.preventDefault(); });
+  }
+  async function doImport() {
+    var ok = confirm('Import actuals from SQL? New rows will be created with line=00; duplicates (ignoring line) will be skipped.');
+    if (!ok) return;
+    try {
+      if (spinner) spinner.style.display = '';
+      if (importBtn) importBtn.disabled = true;
+      var resp = await fetch('/actuals/import', { method: 'POST' });
+      // Follow-up refresh
+      await fetchAndRender();
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-red-600">Import failed.</td></tr>';
+      if (spinner) spinner.style.display = 'none';
+    } finally {
+      if (importBtn) importBtn.disabled = false;
+    }
+  }
+  if (importBtn) {
+    importBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      doImport();
+    });
+  }
+
+  // --- Delete All button: JS-based POST instead of form submit ---
+  var deleteAllBtn = document.getElementById('delete-all-btn');
+  var deleteAllForm = document.getElementById('delete-all-form');
+  if (deleteAllForm) {
+    deleteAllForm.addEventListener('submit', function(e) { e.preventDefault(); });
+  }
+  async function doDeleteAll() {
+    var ok = confirm('Delete ALL actual items? This cannot be undone.');
+    if (!ok) return;
+    try {
+      if (spinner) spinner.style.display = '';
+      if (deleteAllBtn) deleteAllBtn.disabled = true;
+      var resp = await fetch('/api/actuals/delete00', { method: 'POST' });
+      // Successful delete returns JSON { deleted: n }
+      // We refresh the table regardless of the count
+      await fetchAndRender();
+    } catch (err) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-red-600">Delete failed.</td></tr>';
+      if (spinner) spinner.style.display = 'none';
+    } finally {
+      if (deleteAllBtn) deleteAllBtn.disabled = false;
+    }
+  }
+  if (deleteAllBtn) {
+    deleteAllBtn.addEventListener('click', function(e) {
+      e.preventDefault();
+      doDeleteAll();
+    });
+  }
+
   function saveFilters() {
     localStorage.setItem('actuals.filterGL', filterGL.value);
     localStorage.setItem('actuals.filterDesc', filterDesc.value);
@@ -189,7 +248,7 @@ window.addEventListener('DOMContentLoaded', function() {
   function fetchAndRender() {
     if (spinner) spinner.style.display = '';
     var url = '/api/actual-items' + buildQuery();
-    fetch(url)
+    return fetch(url)
       .then(function(response) { return response.json(); })
       .then(function(data) {
         renderRows(data);

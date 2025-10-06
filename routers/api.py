@@ -1,6 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
-from typing import List
+import uuid
+
+from fastapi import (APIRouter, Depends, HTTPException,
+                     UploadFile, File, Request)
+from fastapi import status
+from typing import List, Dict
 from sqlalchemy.orm import Session
+from sqlalchemy import Table, MetaData
 from db import get_db
 from data.data import Data
 import models
@@ -94,6 +99,17 @@ def actuals_delete(id: str, db: Session = Depends(get_db)):
     ok = crud.delete_actual_item(db, id)
     if not ok: raise HTTPException(404, "Not found")
     return {"ok": True}
+
+@router.post("/actuals/delete00")
+def actuals_delete_line00(db: Session = Depends(get_db)):
+    # delete all actual_items with line='00';
+    items = crud.list_actuals(db)
+    delete_count = 0
+    for it in items:
+        if it.line == '00':
+            crud.delete_actual_item(db, it.id)
+            delete_count += 1
+    return {"deleted": delete_count}
 
 # ---- CSV import/export ----
 
@@ -262,3 +278,68 @@ def api_budget_items(request: Request, db: Session = Depends(get_db)):
         })
     items.sort(key=lambda r: (r["acct5"], r["line"]))
     return JSONResponse(content=items)
+
+
+@router.post("/budgets/import", status_code=200)
+def import_budgets(db: Session = Depends(get_db)):
+    """
+    Calls data.load_budget_import() and saves returned rows into `budget_items`.
+    Expects load_budget_import() to return an iterable of dict-like records.
+    """
+    from db import engine
+    metadata = MetaData()
+    try:
+        data = Data()
+        rows: List[Dict] = data.load_budget_import()
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+    if not rows:
+        return {"imported": 0}
+
+    # Reflect the existing table
+    try:
+        budget_items = Table("budget_items", metadata, autoload_with=engine)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Could not reflect table: {exc}")
+
+    # Bulk insert (SQLAlchemy Core)
+    try:
+        # If rows is a generator, convert to list
+        row_list = list(rows)
+        for r in row_list:
+            amount = r.get('budgetamt', 0)
+            desc = r.get('description', '')
+            gl_acct = r.get('formattedglacctno', '')
+            with engine.begin() as conn:
+                conn.execute(budget_items.insert().values(
+                    id=uuid.uuid4().hex.lower().replace('-', ''),
+                    acct5=gl_acct,
+                    line='00',
+                    amount=float(amount) if amount is not None else 0.0,
+                    description=desc if desc is not None else ''
+                    )
+                )
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Insert failed: {exc}")
+
+    return {"imported": len(row_list)}
+
+@router.post("/budgets/delete_line00", status_code=200)
+def delete_budgets00(db: Session = Depends(get_db)):
+    """
+    Delete all budget_items with line='00';
+    """
+    delete_count = 0
+    try:
+        items = crud.list_budget(db)
+        for it in items:
+            if it.line == '00':
+                crud.delete_budget_item(db, it.id)
+                delete_count += 1
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Delete failed: {exc}")
+
+    return {"deleted": delete_count}

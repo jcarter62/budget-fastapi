@@ -1,226 +1,322 @@
 {% extends "base.html" %}
 {% block content %}
 <!-- Please Wait Spinner -->
-<div id="please-wait-spinner" style="position:fixed;z-index:1000;top:0;left:0;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.7);">
-  <div style="display:flex;flex-direction:column;align-items:center;">
-    <div class="loader" style="border:6px solid #f3f3f3;border-top:6px solid #3498db;border-radius:50%;width:48px;height:48px;animation:spin 1s linear infinite;"></div>
-    <div class="mt-2 text-gray-700 font-semibold">Please wait...</div>
-  </div>
+<div id="please-wait-spinner"
+     style="position:fixed;z-index:1000;top:0;left:0;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.7);">
+    <div style="display:flex;flex-direction:column;align-items:center;">
+        <div class="loader"
+             style="border:6px solid #f3f3f3;border-top:6px solid #3498db;border-radius:50%;width:48px;height:48px;animation:spin 1s linear infinite;"></div>
+        <div class="mt-2 text-gray-700 font-semibold">Please wait...</div>
+    </div>
 </div>
 <style>
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+    @keyframes spin {
+        0% {
+            transform: rotate(0deg);
+        }
+        100% {
+            transform: rotate(360deg);
+        }
+    }
 </style>
 <div class="bg-white p-4 rounded-xl shadow">
-  <div class="flex flex-col gap-3 mb-4">
-    <div class="flex items-center justify-between">
-      <h2 class="font-semibold">Budgets</h2>
-      <div class="flex gap-2">
-        <!-- Replaced HTML form with a plain button that triggers JS fetch to /api/budgets/import -->
-        <button id="importBudgets00" type="button" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">Import Budgets</button>
-        <!-- Replace delete form with JS-driven button -->
-        <button id="deleteBudgets00" type="button" class="border rounded px-3 bg-red-100 hover:bg-red-200">Delete Imported Budgets</button>
-      </div>
-      <div id="budget_toast" class="hidden text-sm px-2 py-1 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">Saved</div>
+    <div class="flex flex-col gap-3 mb-4">
+        <div class="flex items-center justify-between">
+            <h2 class="font-semibold">Budgets</h2>
+            <div class="flex gap-2">
+                <!-- Replaced HTML form with a plain button that triggers JS fetch to /api/budgets/import -->
+                <button id="importBudgets00" type="button" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">
+                    Import Budgets
+                </button>
+                <!-- Replace delete form with JS-driven button -->
+                <button id="deleteBudgets00" type="button" class="border rounded px-3 bg-red-100 hover:bg-red-200">
+                    Delete Imported Budgets
+                </button>
+            </div>
+            <div id="budget_toast"
+                 class="hidden text-sm px-2 py-1 rounded bg-emerald-100 text-emerald-900 border border-emerald-200">
+                Saved
+            </div>
+        </div>
+        <div class="flex flex-wrap gap-4 items-end mb-2">
+            <div>
+                <label for="filter-gl" class="block text-sm font-medium">GL</label>
+                <!-- Converted from <select> to text input; now supports partial search -->
+                <input id="filter-gl" type="text" class="border rounded px-2 py-1" placeholder="Search GL (contains)"/>
+            </div>
+            <div>
+                <label for="filter-desc" class="block text-sm font-medium">Description</label>
+                <input id="filter-desc" type="text" class="border rounded px-2 py-1"
+                       placeholder="Search description...">
+            </div>
+            <div>
+                <label for="filter-manager" class="block text-sm font-medium">Manager</label>
+                <select id="filter-manager" class="border rounded px-2 py-1">
+                    <option value="">All</option>
+                    {% for m in managers %}
+                    <option value="{{m.id}}">{{m.name}}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button id="clear-filters" class="ml-2 px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200">Clear
+            </button>
+        </div>
     </div>
-    <div class="flex flex-wrap gap-4 items-end mb-2">
-      <div>
-        <label for="filter-gl" class="block text-sm font-medium">GL</label>
-        <!-- Converted from <select> to text input; now supports partial search -->
-        <input id="filter-gl" type="text" class="border rounded px-2 py-1" placeholder="Search GL (contains)" />
-      </div>
-      <div>
-        <label for="filter-desc" class="block text-sm font-medium">Description</label>
-        <input id="filter-desc" type="text" class="border rounded px-2 py-1" placeholder="Search description...">
-      </div>
-      <div>
-        <label for="filter-manager" class="block text-sm font-medium">Manager</label>
-        <select id="filter-manager" class="border rounded px-2 py-1">
-          <option value="">All</option>
-          {% for m in managers %}
-            <option value="{{m.id}}">{{m.name}}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <button id="clear-filters" class="ml-2 px-3 py-1 border rounded bg-gray-100 hover:bg-gray-200">Clear</button>
-    </div>
-  </div>
-  <table class="w-full text-sm" id="budget-table">
-    <thead>
-      <tr class="text-left border-b">
-        <th class="py-1">GL</th>
-        <th>Line</th>
-        <th>Budget</th>
-        <th>Description</th>
-        <th>Manager</th>
-          <th>
+    <table class="w-full text-sm" id="budget-table">
+        <thead>
+        <tr class="text-left border-b">
+            <th class="py-1">GL</th>
+            <th>Line</th>
+            <th>Budget</th>
+            <th>Description</th>
+            <th>Manager</th>
+            <th>
               <span>
                 <img src="/static/plus-square-solid.svg" height="10" width="10">
                 <img src="/static/minus-square-solid.svg" height="10" width="10">
                 <img src="/static/pen-square-solid.svg" height="10" width="10">
               </span>
-          </th>
-      </tr>
-    </thead>
-    <tbody id="budget-tbody">
-      <!-- Rows will be rendered here by JS -->
-    </tbody>
-  </table>
+            </th>
+            <th>&nbsp;</th>
+        </tr>
+        </thead>
+        <tbody id="budget-tbody">
+        <!-- Rows will be rendered here by JS -->
+        </tbody>
+    </table>
 </div>
 <script>
-window.addEventListener('DOMContentLoaded', function() {
-  var spinner = document.getElementById('please-wait-spinner');
-  var tbody = document.getElementById('budget-tbody');
-  var filterGL = document.getElementById('filter-gl');
-  var filterDesc = document.getElementById('filter-desc');
-  var filterManager = document.getElementById('filter-manager');
-  var clearBtn = document.getElementById('clear-filters');
-  var toast = document.getElementById('budget_toast');
-  var importBtn = document.getElementById('importBudgets00');
-  var deleteBtn = document.getElementById('deleteBudgets00');
-  // Build manager lookup from the Manager <select> options
-  var managerMap = {};
-  Array.prototype.forEach.call(filterManager && filterManager.options || [], function(opt) {
-    if (opt.value) managerMap[opt.value] = opt.text;
-  });
+    window.addEventListener('DOMContentLoaded', function () {
+        var spinner = document.getElementById('please-wait-spinner');
+        var tbody = document.getElementById('budget-tbody');
+        var filterGL = document.getElementById('filter-gl');
+        var filterDesc = document.getElementById('filter-desc');
+        var filterManager = document.getElementById('filter-manager');
+        var clearBtn = document.getElementById('clear-filters');
+        var toast = document.getElementById('budget_toast');
+        var importBtn = document.getElementById('importBudgets00');
+        var deleteBtn = document.getElementById('deleteBudgets00');
+        // Build manager lookup from the Manager <select> options
+        var managerMap = {};
+        Array.prototype.forEach.call(filterManager && filterManager.options || [], function (opt) {
+            if (opt.value) managerMap[opt.value] = opt.text;
+        });
 
-  function showToast(msg, isError) {
-    if (!toast) return;
-    toast.textContent = msg;
-    toast.classList.remove('hidden');
-    // Toggle success/error styles
-    var successClasses = ['bg-emerald-100','text-emerald-900','border-emerald-200'];
-    var errorClasses = ['bg-red-100','text-red-900','border-red-200'];
-    successClasses.concat(errorClasses).forEach(function(c){ toast.classList.remove(c); });
-    (isError ? errorClasses : successClasses).forEach(function(c){ toast.classList.add(c); });
-    setTimeout(function(){ toast.classList.add('hidden'); }, 3000);
-  }
-
-  // Save/restore filters
-  function saveFilters() {
-    localStorage.setItem('budgets.filterGL', filterGL.value);
-    localStorage.setItem('budgets.filterDesc', filterDesc.value);
-    localStorage.setItem('budgets.filterManager', filterManager.value);
-  }
-  function restoreFilters() {
-    var gl = localStorage.getItem('budgets.filterGL') || '';
-    var desc = localStorage.getItem('budgets.filterDesc') || '';
-    var mgr = localStorage.getItem('budgets.filterManager') || '';
-    filterGL.value = gl;
-    filterDesc.value = desc;
-    filterManager.value = mgr;
-  }
-
-  function buildQuery() {
-    var params = [];
-    // Remove acct5 exact filtering from server query; we do contains filtering client-side now
-    if (filterDesc.value) params.push('description=' + encodeURIComponent(filterDesc.value));
-    if (filterManager.value) params.push('manager=' + encodeURIComponent(filterManager.value));
-    return params.length ? ('?' + params.join('&')) : '';
-  }
-
-  function renderRows(items) {
-    tbody.innerHTML = '';
-    if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-gray-500">No budget items found.</td></tr>';
-      return;
-    }
-    items.forEach(function(r) {
-      var tr = document.createElement('tr');
-      tr.className = 'border-b';
-      tr.innerHTML = `
-        <td class="py-1 font-mono">${r.acct5}</td>
-        <td class="font-mono">${r.line}</td>
-        <td>$${parseFloat(r.budget).toFixed(2)}</td>
-        <td>${r.budget_desc || ''}</td>
-        <td>${managerMap[r.manager_id] || ''}</td>
-        <td><img src="/static/plus-square-solid.svg" height="16" width="16"></td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  function fetchAndRender() {
-    if (spinner) spinner.style.display = '';
-    var url = '/api/budget-items' + buildQuery();
-    fetch(url)
-      .then(function(response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); })
-      .then(function(data) {
-        // Client-side contains filtering for GL
-        var gl = (filterGL.value || '').toLowerCase();
-        var filtered = data;
-        if (gl) {
-          filtered = data.filter(function(r){ return (r.acct5 || '').toLowerCase().indexOf(gl) !== -1; });
+        function showToast(msg, isError) {
+            if (!toast) return;
+            toast.textContent = msg;
+            toast.classList.remove('hidden');
+            // Toggle success/error styles
+            var successClasses = ['bg-emerald-100', 'text-emerald-900', 'border-emerald-200'];
+            var errorClasses = ['bg-red-100', 'text-red-900', 'border-red-200'];
+            successClasses.concat(errorClasses).forEach(function (c) {
+                toast.classList.remove(c);
+            });
+            (isError ? errorClasses : successClasses).forEach(function (c) {
+                toast.classList.add(c);
+            });
+            setTimeout(function () {
+                toast.classList.add('hidden');
+            }, 3000);
         }
-        renderRows(filtered);
-        if (spinner) spinner.style.display = 'none';
-      })
-      .catch(function(err) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-red-600">Failed to load data.</td></tr>';
-        if (spinner) spinner.style.display = 'none';
-      });
-  }
 
-  function doImportBudgets() {
-    if (!confirm('Import budgets from source and insert into line 00?')) return;
-    if (spinner) spinner.style.display = '';
-    if (importBtn) importBtn.disabled = true;
-    fetch('/api/budgets/import', { method: 'POST' })
-      .then(function(resp) { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.json().catch(function(){ return {}; }); })
-      .then(function(data) {
-        var count = (data && (data.imported || data.count)) || 0;
-        showToast('Imported ' + count + ' budget rows');
+        // Save/restore filters
+        function saveFilters() {
+            localStorage.setItem('budgets.filterGL', filterGL.value);
+            localStorage.setItem('budgets.filterDesc', filterDesc.value);
+            localStorage.setItem('budgets.filterManager', filterManager.value);
+        }
+
+        function restoreFilters() {
+            var gl = localStorage.getItem('budgets.filterGL') || '';
+            var desc = localStorage.getItem('budgets.filterDesc') || '';
+            var mgr = localStorage.getItem('budgets.filterManager') || '';
+            filterGL.value = gl;
+            filterDesc.value = desc;
+            filterManager.value = mgr;
+        }
+
+        function buildQuery() {
+            var params = [];
+            // Remove acct5 exact filtering from server query; we do contains filtering client-side now
+            if (filterDesc.value) params.push('description=' + encodeURIComponent(filterDesc.value));
+            if (filterManager.value) params.push('manager=' + encodeURIComponent(filterManager.value));
+            return params.length ? ('?' + params.join('&')) : '';
+        }
+
+        function addGlLine(gl) {
+            // create a window , request line number, amount and description
+
+        }
+
+        function editGlLine(gl, line) {
+            // open window, allow user to edit amount and description
+
+        }
+
+        function deleteGlLine(gl, line) {
+            if (!confirm('Are you sure you want to delete budget ' + gl + ' line ' + line + '?')) return;
+            var url = '/budgets/delete/' + encodeURIComponent(gl) + '/' + encodeURIComponent(line);
+            fetch(url, {method: 'POST'})
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    return resp.json().catch(function () {
+                        return {};
+                    });
+                })
+                .then(function (data) {
+                    showToast('Deleted budget ' + gl + ' line ' + line);
+                    fetchAndRender();
+                })
+                .catch(function (err) {
+                    showToast('Delete failed: ' + err.message, true);
+                });
+        }
+
+        function renderRows(items) {
+            tbody.innerHTML = '';
+            if (!items.length) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-gray-500">No budget items found.</td></tr>';
+                return;
+            }
+            items.forEach(function (r) {
+                // Create table row with id = ${r.acct5}-${r.line}
+
+                let tr = document.createElement('tr');
+                tr.id = `${r.acct5}-${r.line}`;
+
+                tr.className = 'border-b';
+                if (r.line === '00') {
+                    tr.innerHTML = `
+                        <td class="py-1 font-mono">${r.acct5}</td>
+                        <td class="font-mono">${r.line}</td>
+                        <td>$${parseFloat(r.budget).toFixed(2)}</td>
+                        <td>${r.budget_desc || ''}</td>
+                        <td>${managerMap[r.manager_id] || ''}</td>
+                        <td onclick="addGlLine('${r.acct5}');">
+                            <img src="/static/plus-square-solid.svg" height="16" width="16">
+                        </td><td>&nbsp;</td>`;
+                } else {
+                    tr.innerHTML = `
+                        <td class="py-1 font-mono">&nbsp;</td>
+                        <td class="font-mono">${r.line}</td>
+                        <td>$${parseFloat(r.budget).toFixed(2)}</td>
+                        <td>${r.budget_desc || ''}</td>
+                        <td>&nbsp;</td>
+                        <td>
+                            <img onclick="editGlLine('${r.acct5}', '${r.line}');" src="/static/pen-square-solid.svg" height="16" width="16">
+                        </td>
+                        <td>
+                            <img onclick="deleteGlLine('${r.acct5}', '${r.line}');" src="/static/minus-square-solid.svg" height="16" width="16">
+                        </td>`;
+                }
+                tbody.appendChild(tr);
+            });
+        }
+
+        function fetchAndRender() {
+            if (spinner) spinner.style.display = '';
+            var url = '/api/budget-items' + buildQuery();
+            fetch(url)
+                .then(function (response) {
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    return response.json();
+                })
+                .then(function (data) {
+                    // Client-side contains filtering for GL
+                    var gl = (filterGL.value || '').toLowerCase();
+                    var filtered = data;
+                    if (gl) {
+                        filtered = data.filter(function (r) {
+                            return (r.acct5 || '').toLowerCase().indexOf(gl) !== -1;
+                        });
+                    }
+                    renderRows(filtered);
+                    if (spinner) spinner.style.display = 'none';
+                })
+                .catch(function (err) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-red-600">Failed to load data.</td></tr>';
+                    if (spinner) spinner.style.display = 'none';
+                });
+        }
+
+        function doImportBudgets() {
+            if (!confirm('Import budgets from source and insert into line 00?')) return;
+            if (spinner) spinner.style.display = '';
+            if (importBtn) importBtn.disabled = true;
+            fetch('/api/budgets/import', {method: 'POST'})
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    return resp.json().catch(function () {
+                        return {};
+                    });
+                })
+                .then(function (data) {
+                    var count = (data && (data.imported || data.count)) || 0;
+                    showToast('Imported ' + count + ' budget rows');
+                    fetchAndRender();
+                })
+                .catch(function (err) {
+                    showToast('Import failed: ' + err.message, true);
+                })
+                .finally(function () {
+                    if (spinner) spinner.style.display = 'none';
+                    if (importBtn) importBtn.disabled = false;
+                });
+        }
+
+        function doDeleteBudgets() {
+            if (!confirm('Delete all imported budgets (line=00)?')) return;
+            if (spinner) spinner.style.display = '';
+            if (deleteBtn) deleteBtn.disabled = true;
+            fetch('/api/budgets/delete_line00', {method: 'POST'})
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    return resp.json().catch(function () {
+                        return {};
+                    });
+                })
+                .then(function (data) {
+                    var count = (data && (data.deleted || data.count)) || 0;
+                    showToast('Deleted ' + count + ' imported budget rows');
+                    fetchAndRender();
+                })
+                .catch(function (err) {
+                    showToast('Delete failed: ' + err.message, true);
+                })
+                .finally(function () {
+                    if (spinner) spinner.style.display = 'none';
+                    if (deleteBtn) deleteBtn.disabled = false;
+                });
+        }
+
+        // Event listeners
+        if (importBtn) importBtn.addEventListener('click', doImportBudgets);
+        if (deleteBtn) deleteBtn.addEventListener('click', doDeleteBudgets);
+        // Use input event for the text field
+        filterGL.addEventListener('input', function () {
+            saveFilters();
+            fetchAndRender();
+        });
+        filterDesc.addEventListener('input', function () {
+            saveFilters();
+            fetchAndRender();
+        });
+        filterManager.addEventListener('change', function () {
+            saveFilters();
+            fetchAndRender();
+        });
+        clearBtn.addEventListener('click', function () {
+            filterGL.value = '';
+            filterDesc.value = '';
+            filterManager.value = '';
+            saveFilters();
+            fetchAndRender();
+        });
+
+        // Restore filters and fetch data on load
+        restoreFilters();
         fetchAndRender();
-      })
-      .catch(function(err) {
-        showToast('Import failed: ' + err.message, true);
-      })
-      .finally(function(){
-        if (spinner) spinner.style.display = 'none';
-        if (importBtn) importBtn.disabled = false;
-      });
-  }
-
-  function doDeleteBudgets() {
-    if (!confirm('Delete all imported budgets (line=00)?')) return;
-    if (spinner) spinner.style.display = '';
-    if (deleteBtn) deleteBtn.disabled = true;
-    fetch('/api/budgets/delete_line00', { method: 'POST' })
-      .then(function(resp) { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.json().catch(function(){ return {}; }); })
-      .then(function(data) {
-        var count = (data && (data.deleted || data.count)) || 0;
-        showToast('Deleted ' + count + ' imported budget rows');
-        fetchAndRender();
-      })
-      .catch(function(err) {
-        showToast('Delete failed: ' + err.message, true);
-      })
-      .finally(function(){
-        if (spinner) spinner.style.display = 'none';
-        if (deleteBtn) deleteBtn.disabled = false;
-      });
-  }
-
-  // Event listeners
-  if (importBtn) importBtn.addEventListener('click', doImportBudgets);
-  if (deleteBtn) deleteBtn.addEventListener('click', doDeleteBudgets);
-  // Use input event for the text field
-  filterGL.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
-  filterDesc.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
-  filterManager.addEventListener('change', function() { saveFilters(); fetchAndRender(); });
-  clearBtn.addEventListener('click', function() {
-    filterGL.value = '';
-    filterDesc.value = '';
-    filterManager.value = '';
-    saveFilters();
-    fetchAndRender();
-  });
-
-  // Restore filters and fetch data on load
-  restoreFilters();
-  fetchAndRender();
-});
+    });
 </script>
 {% endblock %}

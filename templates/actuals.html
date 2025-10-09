@@ -17,12 +17,9 @@
   <div class="flex items-center justify-between mb-4">
     <h2 class="text-lg font-semibold">Actuals</h2>
     <div class="flex items-center gap-2">
-      <form id="import-form">
-        <button id="import-btn" type="button" class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
-      </form>
-      <form id="delete-all-form">
-        <button id="delete-all-btn" type="button" class="bg-red-600 text-white px-3 py-1 rounded">Delete All Imported</button>
-      </form>
+      <!-- Use plain buttons that trigger JS fetch calls -->
+      <button id="import-btn" type="button" class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
+      <button id="delete-all-btn" type="button" class="bg-red-600 text-white px-3 py-1 rounded">Delete All Imported</button>
     </div>
   </div>
   <section class="bg-slate-50 p-3 rounded border mb-6">
@@ -57,12 +54,8 @@
   <div class="mb-4 flex flex-wrap gap-4 items-end">
     <div>
       <label for="filter-gl" class="block text-xs text-gray-600">Account</label>
-      <select id="filter-gl" class="border rounded p-2 w-full">
-        <option value="">(All)</option>
-        {% for a in accounts|sort(attribute='key') %}
-          <option value="{{a.key}}">{{a.key}} — {{a.description}}</option>
-        {% endfor %}
-      </select>
+      <!-- Converted from <select> to text input -->
+      <input id="filter-gl" type="text" class="border rounded p-2 w-full" placeholder="Enter GL (exact match)" />
     </div>
     <div>
       <label for="filter-desc" class="block text-xs text-gray-600">Description contains</label>
@@ -124,24 +117,21 @@ window.addEventListener('DOMContentLoaded', function() {
   var filterVendor = document.getElementById('filter-vendor');
   var filterManager = document.getElementById('filter-manager');
   var clearBtn = document.getElementById('clear-filters');
+  // Build manager lookup from the Manager <select> options
   var managerMap = {};
-  {% for m in managers %}
-    managerMap["{{m.id}}"] = "{{m.name}}";
-  {% endfor %}
+  Array.prototype.forEach.call(filterManager && filterManager.options || [], function(opt) {
+    if (opt.value) managerMap[opt.value] = opt.text;
+  });
 
-  // --- Import button: JS-based POST instead of form submit ---
+  // --- Import button: JS-based POST ---
   var importBtn = document.getElementById('import-btn');
-  var importForm = document.getElementById('import-form');
-  if (importForm) {
-    importForm.addEventListener('submit', function(e) { e.preventDefault(); });
-  }
   async function doImport() {
     var ok = confirm('Import actuals from SQL? New rows will be created with line=00; duplicates (ignoring line) will be skipped.');
     if (!ok) return;
     try {
       if (spinner) spinner.style.display = '';
       if (importBtn) importBtn.disabled = true;
-      var resp = await fetch('/actuals/import', { method: 'POST' });
+      await fetch('/api/actuals/import', { method: 'POST' });
       // Follow-up refresh
       await fetchAndRender();
     } catch (err) {
@@ -158,21 +148,15 @@ window.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // --- Delete All button: JS-based POST instead of form submit ---
+  // --- Delete All button: JS-based POST ---
   var deleteAllBtn = document.getElementById('delete-all-btn');
-  var deleteAllForm = document.getElementById('delete-all-form');
-  if (deleteAllForm) {
-    deleteAllForm.addEventListener('submit', function(e) { e.preventDefault(); });
-  }
   async function doDeleteAll() {
     var ok = confirm('Delete ALL actual items? This cannot be undone.');
     if (!ok) return;
     try {
       if (spinner) spinner.style.display = '';
       if (deleteAllBtn) deleteAllBtn.disabled = true;
-      var resp = await fetch('/api/actuals/delete00', { method: 'POST' });
-      // Successful delete returns JSON { deleted: n }
-      // We refresh the table regardless of the count
+      await fetch('/api/actuals/delete00', { method: 'POST' });
       await fetchAndRender();
     } catch (err) {
       tbody.innerHTML = '<tr><td colspan="8" class="text-red-600">Delete failed.</td></tr>';
@@ -259,7 +243,8 @@ window.addEventListener('DOMContentLoaded', function() {
         if (spinner) spinner.style.display = 'none';
       });
   }
-  filterGL.addEventListener('change', function() { saveFilters(); fetchAndRender(); });
+  // Use input event for text field
+  filterGL.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
   filterDesc.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
   filterVendor.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
   filterManager.addEventListener('change', function() { saveFilters(); fetchAndRender(); });

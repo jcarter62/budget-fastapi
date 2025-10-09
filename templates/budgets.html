@@ -16,10 +16,10 @@
 <div class="bg-white p-4 rounded-xl shadow">
   <div class="flex flex-col gap-3 mb-4">
     <div class="flex items-center justify-between">
-      <h2 class="font-semibold">Budgets (Fast Entry)</h2>
+      <h2 class="font-semibold">Budgets</h2>
       <div class="flex gap-2">
         <!-- Replaced HTML form with a plain button that triggers JS fetch to /api/budgets/import -->
-        <button id="importBudets00" type="button" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">Import Budgets</button>
+        <button id="importBudgets00" type="button" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">Import Budgets</button>
         <!-- Replace delete form with JS-driven button -->
         <button id="deleteBudgets00" type="button" class="border rounded px-3 bg-red-100 hover:bg-red-200">Delete Imported Budgets</button>
       </div>
@@ -28,12 +28,8 @@
     <div class="flex flex-wrap gap-4 items-end mb-2">
       <div>
         <label for="filter-gl" class="block text-sm font-medium">GL</label>
-        <select id="filter-gl" class="border rounded px-2 py-1">
-          <option value="">All</option>
-          {% for a in accounts %}
-            <option value="{{a.key}}">{{a.key}} - {{a.description}}</option>
-          {% endfor %}
-        </select>
+        <!-- Converted from <select> to text input; now supports partial search -->
+        <input id="filter-gl" type="text" class="border rounded px-2 py-1" placeholder="Search GL (contains)" />
       </div>
       <div>
         <label for="filter-desc" class="block text-sm font-medium">Description</label>
@@ -59,6 +55,13 @@
         <th>Budget</th>
         <th>Description</th>
         <th>Manager</th>
+          <th>
+              <span>
+                <img src="/static/plus-square-solid.svg" height="10" width="10">
+                <img src="/static/minus-square-solid.svg" height="10" width="10">
+                <img src="/static/pen-square-solid.svg" height="10" width="10">
+              </span>
+          </th>
       </tr>
     </thead>
     <tbody id="budget-tbody">
@@ -75,7 +78,7 @@ window.addEventListener('DOMContentLoaded', function() {
   var filterManager = document.getElementById('filter-manager');
   var clearBtn = document.getElementById('clear-filters');
   var toast = document.getElementById('budget_toast');
-  var importBtn = document.getElementById('importBudets00');
+  var importBtn = document.getElementById('importBudgets00');
   var deleteBtn = document.getElementById('deleteBudgets00');
   // Build manager lookup from the Manager <select> options
   var managerMap = {};
@@ -112,7 +115,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
   function buildQuery() {
     var params = [];
-    if (filterGL.value) params.push('acct5=' + encodeURIComponent(filterGL.value));
+    // Remove acct5 exact filtering from server query; we do contains filtering client-side now
     if (filterDesc.value) params.push('description=' + encodeURIComponent(filterDesc.value));
     if (filterManager.value) params.push('manager=' + encodeURIComponent(filterManager.value));
     return params.length ? ('?' + params.join('&')) : '';
@@ -133,6 +136,7 @@ window.addEventListener('DOMContentLoaded', function() {
         <td>$${parseFloat(r.budget).toFixed(2)}</td>
         <td>${r.budget_desc || ''}</td>
         <td>${managerMap[r.manager_id] || ''}</td>
+        <td><img src="/static/plus-square-solid.svg" height="16" width="16"></td>
       `;
       tbody.appendChild(tr);
     });
@@ -144,7 +148,13 @@ window.addEventListener('DOMContentLoaded', function() {
     fetch(url)
       .then(function(response) { if (!response.ok) throw new Error('HTTP ' + response.status); return response.json(); })
       .then(function(data) {
-        renderRows(data);
+        // Client-side contains filtering for GL
+        var gl = (filterGL.value || '').toLowerCase();
+        var filtered = data;
+        if (gl) {
+          filtered = data.filter(function(r){ return (r.acct5 || '').toLowerCase().indexOf(gl) !== -1; });
+        }
+        renderRows(filtered);
         if (spinner) spinner.style.display = 'none';
       })
       .catch(function(err) {
@@ -196,7 +206,8 @@ window.addEventListener('DOMContentLoaded', function() {
   // Event listeners
   if (importBtn) importBtn.addEventListener('click', doImportBudgets);
   if (deleteBtn) deleteBtn.addEventListener('click', doDeleteBudgets);
-  filterGL.addEventListener('change', function() { saveFilters(); fetchAndRender(); });
+  // Use input event for the text field
+  filterGL.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
   filterDesc.addEventListener('input', function() { saveFilters(); fetchAndRender(); });
   filterManager.addEventListener('change', function() { saveFilters(); fetchAndRender(); });
   clearBtn.addEventListener('click', function() {

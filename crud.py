@@ -63,8 +63,13 @@ def delete_all_accounts(db: Session):
     db.query(models.Account).delete()
     db.commit()
 
+def get_all_accounts(db: Session):
+    accounts = db.execute(select(models.Account)).scalars().all()
+    return accounts
+
 def get_account_by_key(db: Session, key: str):
-    return db.execute(select(models.Account).where(models.Account.key == key)).scalars().first()
+    search_result = db.execute(select(models.Account).where(models.Account.key == key)).scalars().first()
+    return search_result
 
 # ---------- Budget Items ----------
 def list_budget(db: Session):

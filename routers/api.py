@@ -6,6 +6,8 @@ from fastapi import status
 from typing import List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import Table, MetaData
+from starlette.responses import RedirectResponse
+
 from db import get_db
 from data.data import Data
 import models
@@ -308,18 +310,27 @@ def import_budgets(db: Session = Depends(get_db)):
         # If rows is a generator, convert to list
         row_list = list(rows)
         for r in row_list:
-            amount = r.get('budgetamt', 0)
-            desc = r.get('description', '')
             gl_acct = r.get('formattedglacctno', '')
-            with engine.begin() as conn:
-                conn.execute(budget_items.insert().values(
-                    id=uuid.uuid4().hex.lower().replace('-', ''),
-                    acct5=gl_acct,
-                    line='00',
-                    amount=float(amount) if amount is not None else 0.0,
-                    description=desc if desc is not None else ''
+            #
+            # extract last 14 characters of gl_acct
+            # skip if last 14 are all zeros
+            #
+            gl_last14 = gl_acct[-14:]
+            if gl_last14 > '00-00-00-00-00':
+                amount = r.get('budgetamt', 0)
+                desc = r.get('description', '')
+                with engine.begin() as conn:
+                    conn.execute(budget_items.insert().values(
+                        id=uuid.uuid4().hex.lower().replace('-', ''),
+                        acct5=gl_acct,
+                        line='00',
+                        amount=float(amount) if amount is not None else 0.0,
+                        description=desc if desc is not None else ''
+                        )
                     )
-                )
+            else:
+                # skip this row
+                pass
 
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Insert failed: {exc}")
@@ -343,3 +354,51 @@ def delete_budgets00(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Delete failed: {exc}")
 
     return {"deleted": delete_count}
+
+
+@router.post("/accounts/import")
+def accounts_import(db: Session = Depends(get_db)):
+    from data import Data
+    from urllib.parse import quote_plus
+    from uuid import uuid4
+    created = 0
+    updated = 0
+    total = 0
+    try:
+        d = Data()
+        rows = d.load_gl_list() or []
+        total = len(rows)
+        for r in rows:
+            key = (r.get('gl') or r.get('formattedglacctno') or '').strip()
+            desc = (r.get('descrip') or r.get('description') or '').strip()
+            if not key:
+                continue
+            existing = crud.get_account_by_key(db, key)
+            if existing:
+                if desc and existing.description != desc:
+                    existing.description = desc
+                    db.commit(); db.refresh(existing)
+                    updated += 1
+            else:
+                newid = uuid4().__str__().lower().replace('-','')
+                crud.create_account(db, schemas.AccountCreate(id=newid, key=key, description=desc or key, manager_id=None))
+                created += 1
+    except Exception as e:
+        msg = quote_plus(str(e))
+        return RedirectResponse(f"/accounts?msg={msg}", status_code=303)
+    return RedirectResponse(f"/accounts?created={created}&updated={updated}&total={total}", status_code=303)
+
+@router.post("/accounts/delete-all")
+def accounts_delete_all(db: Session = Depends(get_db)):
+    from urllib.parse import quote_plus
+    deleted = 0
+    try:
+        accounts = crud.get_all_accounts(db)
+        for a in accounts:
+            id = a.id
+            crud.delete_account(db, id)
+            deleted += 1
+    except Exception as e:
+        msg = quote_plus(str(e))
+        return RedirectResponse(f"/accounts?msg={msg}", status_code=303)
+    return RedirectResponse(f"/accounts?msg=deleted:{deleted}", status_code=200)

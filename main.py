@@ -374,36 +374,6 @@ def test1():
     results = d.load_gl_list()
     return {"data": results}
 
-@app.post("/accounts/import")
-def accounts_import(db: Session = Depends(get_db)):
-    from data import Data
-    from urllib.parse import quote_plus
-    created = 0
-    updated = 0
-    total = 0
-    try:
-        d = Data()
-        rows = d.load_gl_list() or []
-        total = len(rows)
-        for r in rows:
-            key = (r.get('gl') or r.get('formattedglacctno') or '').strip()
-            desc = (r.get('descrip') or r.get('description') or '').strip()
-            if not key:
-                continue
-            existing = crud.get_account_by_key(db, key)
-            if existing:
-                if desc and existing.description != desc:
-                    existing.description = desc
-                    db.commit(); db.refresh(existing)
-                    updated += 1
-            else:
-                crud.create_account(db, schemas.AccountCreate(id=uuid4(), key=key, description=desc or key, manager_id=None))
-                created += 1
-    except Exception as e:
-        msg = quote_plus(str(e))
-        return RedirectResponse(f"/accounts?msg={msg}", status_code=303)
-    return RedirectResponse(f"/accounts?created={created}&updated={updated}&total={total}", status_code=303)
-
 @app.post("/accounts/assign")
 def accounts_assign(payload: dict = Body(...), db: Session = Depends(get_db)):
     account_id = payload.get("account_id")

@@ -32,10 +32,10 @@ window.addEventListener('DOMContentLoaded', function() {
 <div class="flex items-center justify-between mb-4">
   <h2 class="text-lg font-semibold">Accounts</h2>
   <div class="flex gap-2">
-    <form method="post" action="/accounts/import" onsubmit="return confirm('Import accounts from SQL? This will add new accounts and update descriptions of existing ones.');">
+    <form method="post" action="/api/accounts/import" onsubmit="return confirm('Import accounts from SQL? This will add new accounts and update descriptions of existing ones.');">
       <button class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
     </form>
-    <form method="post" action="/accounts/delete-all" onsubmit="return confirm('Delete ALL accounts? This cannot be undone.');">
+    <form method="post" action="/api/accounts/delete-all" onsubmit="return confirm('Delete ALL accounts? This cannot be undone.');">
       <button class="bg-red-600 text-white px-3 py-1 rounded">Delete All Accounts</button>
     </form>
   </div>

@@ -69,6 +69,47 @@ def budget_list(db: Session = Depends(get_db)):
 def budget_create(it: schemas.LineItemCreate, db: Session = Depends(get_db)):
     return crud.create_budget_item(db, it)
 
+@router.post("/budget/add/line/{gl}/{line}/{amount}/{desc}")
+def budget_add_line(
+        gl: str, line: str, amount: float, desc: str,
+        db: Session = Depends(get_db)):
+    try:
+        # Log the received payload for debugging
+        print(f"Received payload: gl={gl}, line={line}, amount={amount}, desc={desc}")
+
+        item: models.BudgetItem = models.BudgetItem()
+        item.acct5 = gl
+        item.line = line
+        item.amount = amount
+        item.description = desc
+        item.id = uuid.uuid4().hex.lower().replace('-', '')
+        obj = crud.create_budget_item(db, item)
+        result = {"msg": item.id, "status": 200}
+    except Exception as exc:
+        result = {"msg": f"Error: {exc}", "status": 500 }
+
+    return result
+
+@router.post("/budget/delete/line/{gl}/{line}")
+def budget_add_line(
+        gl: str, line: str,
+        db: Session = Depends(get_db)):
+    try:
+        # Log the received payload for debugging
+        print(f"Received payload: gl={gl}, line={line}")
+
+        record = crud.get_budget_item_by_acct_line(db, gl, line)
+        if record:
+            crud.delete_budget_item(db, record.id)
+            result = {"msg": f"Deleted budget item {gl} line {line}", "status": 200}
+        else:
+            result = {"msg": f"Budget item {gl} line {line} not found", "status": 404}
+
+    except Exception as exc:
+        result = {"msg": f"Error: {exc}", "status": 500 }
+
+    return result
+
 @router.put("/budget/{id}", response_model=schemas.LineItem)
 def budget_update(id: str, it: schemas.LineItemBase, db: Session = Depends(get_db)):
     obj = crud.update_budget_item(db, id, it)

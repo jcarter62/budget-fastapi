@@ -85,15 +85,42 @@
         </tbody>
     </table>
 </div>
+
+<!-- Add a modal dialog for adding GL lines -->
+<div id="add-gl-line-modal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center">
+    <div class="bg-white p-6 rounded shadow-md w-96">
+        <h2 class="text-lg font-semibold mb-4">Add GL Line</h2>
+        <form id="add-gl-line-form">
+            <div class="mb-4">
+                <label for="line-number" class="block text-sm font-medium">Line Number</label>
+                <input id="line-number" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter line number (e.g., 01)" required>
+            </div>
+            <div class="mb-4">
+                <label for="budget-amount" class="block text-sm font-medium">Budget Amount</label>
+                <input id="budget-amount" type="number" class="border rounded px-2 py-1 w-full" placeholder="Enter budget amount" required>
+            </div>
+            <div class="mb-4">
+                <label for="description" class="block text-sm font-medium">Description</label>
+                <input id="description" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter description (optional)">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" id="cancel-add-gl-line" class="px-4 py-2 bg-gray-200 rounded">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+    let spinner = document.getElementById('please-wait-spinner');
+    let toast = document.getElementById('budget_toast');
+
     window.addEventListener('DOMContentLoaded', function () {
-        var spinner = document.getElementById('please-wait-spinner');
         var tbody = document.getElementById('budget-tbody');
         var filterGL = document.getElementById('filter-gl');
         var filterDesc = document.getElementById('filter-desc');
         var filterManager = document.getElementById('filter-manager');
         var clearBtn = document.getElementById('clear-filters');
-        var toast = document.getElementById('budget_toast');
         var importBtn = document.getElementById('importBudgets00');
         var deleteBtn = document.getElementById('deleteBudgets00');
         // Build manager lookup from the Manager <select> options
@@ -102,23 +129,6 @@
             if (opt.value) managerMap[opt.value] = opt.text;
         });
 
-        function showToast(msg, isError) {
-            if (!toast) return;
-            toast.textContent = msg;
-            toast.classList.remove('hidden');
-            // Toggle success/error styles
-            var successClasses = ['bg-emerald-100', 'text-emerald-900', 'border-emerald-200'];
-            var errorClasses = ['bg-red-100', 'text-red-900', 'border-red-200'];
-            successClasses.concat(errorClasses).forEach(function (c) {
-                toast.classList.remove(c);
-            });
-            (isError ? errorClasses : successClasses).forEach(function (c) {
-                toast.classList.add(c);
-            });
-            setTimeout(function () {
-                toast.classList.add('hidden');
-            }, 3000);
-        }
 
         // Save/restore filters
         function saveFilters() {
@@ -144,35 +154,6 @@
             return params.length ? ('?' + params.join('&')) : '';
         }
 
-        function addGlLine(gl) {
-            // create a window , request line number, amount and description
-
-        }
-
-        function editGlLine(gl, line) {
-            // open window, allow user to edit amount and description
-
-        }
-
-        function deleteGlLine(gl, line) {
-            if (!confirm('Are you sure you want to delete budget ' + gl + ' line ' + line + '?')) return;
-            var url = '/budgets/delete/' + encodeURIComponent(gl) + '/' + encodeURIComponent(line);
-            fetch(url, {method: 'POST'})
-                .then(function (resp) {
-                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-                    return resp.json().catch(function () {
-                        return {};
-                    });
-                })
-                .then(function (data) {
-                    showToast('Deleted budget ' + gl + ' line ' + line);
-                    fetchAndRender();
-                })
-                .catch(function (err) {
-                    showToast('Delete failed: ' + err.message, true);
-                });
-        }
-
         function renderRows(items) {
             tbody.innerHTML = '';
             if (!items.length) {
@@ -193,8 +174,8 @@
                         <td>$${parseFloat(r.budget).toFixed(2)}</td>
                         <td>${r.budget_desc || ''}</td>
                         <td>${managerMap[r.manager_id] || ''}</td>
-                        <td onclick="addGlLine('${r.acct5}');">
-                            <img src="/static/plus-square-solid.svg" height="16" width="16">
+                        <td>
+                            <img onclick="addGlLine('${r.acct5}');" src="/static/plus-square-solid.svg" height="16" width="16">
                         </td><td>&nbsp;</td>`;
                 } else {
                     tr.innerHTML = `
@@ -318,5 +299,107 @@
         restoreFilters();
         fetchAndRender();
     });
+
+    // Modify addGlLine to use the modal dialog
+    function addGlLine(gl) {
+        const modal = document.getElementById('add-gl-line-modal');
+        const form = document.getElementById('add-gl-line-form');
+        const cancelBtn = document.getElementById('cancel-add-gl-line');
+
+        // Show the modal
+        modal.classList.remove('hidden');
+
+        // Handle form submission
+        form.onsubmit = function (event) {
+            event.preventDefault();
+
+            const line = document.getElementById('line-number').value;
+            const amount = document.getElementById('budget-amount').value;
+            const desc = document.getElementById('description').value;
+
+            if (!line || isNaN(amount)) {
+                showToast('Please provide valid inputs', true);
+                return;
+            }
+
+            // Add logging to debug the fetch request
+            console.log('Sending request to /budget/add/line with payload:', {gl, line, amount, desc});
+
+            let url = '/api/budget/add/line/';
+            url += gl + '/' + line + '/' + amount + '/' + encodeURIComponent(desc || '');
+
+            fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            })
+                .then(function (resp) {
+                    console.log('Response received:', resp);
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    return resp.json();
+                })
+                .then(function (data) {
+                    console.log('Response data:', data);
+                    showToast('Added budget line ' + gl + ' ' + line);
+                    fetchAndRender();
+                })
+                .catch(function (err) {
+                    console.error('Fetch error:', err);
+                    showToast('Add failed: ' + err.message, true);
+                })
+                .finally(function () {
+                    if (spinner) spinner.style.display = 'none';
+                    modal.classList.add('hidden');
+                    form.reset();
+                    // reload this page to reflect changes;
+                    window.location.reload();
+                });
+        };
+
+        // Handle cancel button
+        cancelBtn.onclick = function () {
+            modal.classList.add('hidden');
+            form.reset();
+        };
+    }
+
+    function editGlLine(gl, line) {
+        // open window, allow user to edit amount and description
+
+    }
+
+    function deleteGlLine(gl, line) {
+        if (!confirm('Are you sure you want to delete budget ' + gl + ' line ' + line + '?')) return;
+
+        let url = '/api/budget/delete/line/' + encodeURIComponent(gl) + '/' + encodeURIComponent(line);
+        fetch(url, {method: 'POST'})
+            .then(function (resp) {
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                return resp.json().catch(function () {
+                    return {};
+                });
+            })
+            .finally(function () {
+                window.location.reload();
+            });
+    }
+
+        function showToast(msg, isError) {
+            if (!toast) return;
+            toast.textContent = msg;
+            toast.classList.remove('hidden');
+            // Toggle success/error styles
+            var successClasses = ['bg-emerald-100', 'text-emerald-900', 'border-emerald-200'];
+            var errorClasses = ['bg-red-100', 'text-red-900', 'border-red-200'];
+            successClasses.concat(errorClasses).forEach(function (c) {
+                toast.classList.remove(c);
+            });
+            (isError ? errorClasses : successClasses).forEach(function (c) {
+                toast.classList.add(c);
+            });
+            setTimeout(function () {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
 </script>
 {% endblock %}

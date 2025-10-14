@@ -45,10 +45,10 @@
       <tr>
         <th style="text-align: left;">GL</th>
         <th style="text-align: left;">Line</th>
-        <th style="text-align: right;">Budget</th>
+        <th style="text-align: right;">Budget&nbsp;</th>
         <th style="text-align: right;">Actual</th>
         <th style="text-align: right;">Variance</th>
-        <th style="text-align: left;">Description</th>
+        <th style="text-align: left;">&nbsp;Description</th>
       </tr>
     </thead>
     <tbody id="items-tbody">
@@ -103,34 +103,16 @@ window.addEventListener('DOMContentLoaded', function() {
       let tr = document.createElement('tr');
       tr.className = 'border-b';
       tr.setAttribute('data-manager-id', managerId);
-      let actual = fmtAcctNum(r.actual);
-      let budget = fmtAcctNum(r.budget);
-      let variance = fmtAcctNum(r.variance);
+      let actual = fmtRJColumn(r.actual);
+      let budget = fmtRJColumn(r.budget);
+      let variance = fmtRJColumn(r.variance);
 
       tr.innerHTML = `
         <td class="py-1 font-mono">${r.acct5}</td>
         <td class="font-mono">${r.line}</td>
-        <td class="font-mono" style="padding-right: 0;" >
-            <span style="display: flex; justify-content: space-between; width:100%;">
-            <span style="text-align: left;">${budget=='-'?'&nbsp;':'&nbsp;$'}</span>
-            <span style="text-align: right; flex:1;">${budget}</span>
-            </span>
-        </td>
-        <td class="font-mono" style="padding-right: 0;" >
-            <span style="display: flex; justify-content: space-between; width:100%;">
-            <span style="text-align: left;">${actual=='-'?'&nbsp;':'&nbsp;$'}</span>
-            <span style="text-align: right; flex:1;">${actual}</span>
-            </span>
-        </td>
-        <td
-        class="${r.variance >= 0 ? 'text-green-700' : 'text-red-700'} font-semibold font-mono"
-        style="padding-right: 0;" >
-            <span style="display: flex; justify-content: space-between; width:100%;">
-            <span style="text-align: left;">${variance=='-'?'&nbsp;':'&nbsp;$'}</span>
-            <span style="text-align: right; flex:1;">${variance}</span>
-            </span>
-        </td>
-
+        <td class="font-mono" style="padding-right: 0;" >${budget}</td>
+        <td class="font-mono" style="padding-right: 0;" >${actual}</td>
+        <td class="${r.variance >= 0 ? 'text-green-700' : 'text-red-700'} font-semibold font-mono" style="padding-right: 0;" >${variance}</td>
         <td>&nbsp;${r.budget_desc || ''}</td>
       `;
       tbody.appendChild(tr);

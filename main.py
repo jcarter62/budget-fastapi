@@ -491,3 +491,10 @@ def voucher_lines_html(request: Request, vouchno: str = None, db: Session = Depe
                                        "shipping": shipping,
                                        "total_amount": total_amount,})
 
+def currency(value):
+    try:
+        return "{:,.2f}".format(float(value))
+    except Exception:
+        return value
+
+templates.env.filters['currency'] = currency

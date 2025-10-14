@@ -2,38 +2,51 @@
 <div class="text-red-600">Error: {{ error }}</div>
 {% else %}
 <div class="flex items-center justify-between mb-2">
-  <div class="text-sm text-gray-600">Voucher: {{ vouchno }}</div>
+    <div class="text-sm text-gray-600">Voucher: {{ vouchno }}</div>
     <div class="text-base font-semibold text-blue-700">
-        Tax: ${{ '%.2f'|format(tax) }} &nbsp; Freight: ${{ '%.2f'|format(shipping) }} &nbsp;
-        Total: ${{ '%.2f'|format(total_amount) }}
+        Tax: ${{tax|currency}}&nbsp; Freight: ${{shipping|currency}} &nbsp;
+        Total: ${{total_amount|currency}}
     </div>
 </div>
 {% if not rows %}
 <div class="text-sm text-gray-600">No lines found for this voucher.</div>
 {% else %}
 <div class="overflow-auto">
-  <table class="w-full text-sm border">
-    <thead>
-      <tr class="bg-gray-100">
-        {% for col in rows[0].keys() %}
-        {% if col.lower() not in ['tax','freight'] %}
-        <th class="p-2 text-left border-b {% if col.lower() in ['description','comment'] %}w-1/3{% elif col.lower() == 'po' %}w-32 whitespace-nowrap{% endif %}">{{ col }}</th>
-        {% endif %}
+    <table class="w-full text-sm border">
+        <thead>
+        <tr class="bg-gray-100">
+            {% for col in rows[0].keys() %}
+            {% if col.lower() not in ['tax','freight'] %}
+            <th class="p-2 text-left border-b {% if col.lower() in ['description','comment'] %}w-1/3{% elif col.lower() == 'po' %}w-32 whitespace-nowrap{% endif %}">
+                {{ col }}
+            </th>
+            {% endif %}
+            {% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+        <tr class="border-b">
+            {% for col in rows[0].keys() %}
+            {% if col.lower() not in ['tax','freight'] %}
+            <td class="p-2 align-top
+                {% if col.lower() in ['description','comment'] %}
+                    w-1/3 whitespace-nowrap
+                {% elif col.lower() == 'po' %}
+                    w-32 whitespace-nowrap
+                {% endif %}">
+                {% if col.lower() in ['cost','amount'] %}
+                    ${{ r[col]|currency }}
+                {% else %}
+                    {{ r[col] }}
+                {% endif %}
+            </td>
+            {% endif %}
+            {% endfor %}
+        </tr>
         {% endfor %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in rows %}
-      <tr class="border-b">
-        {% for col in rows[0].keys() %}
-        {% if col.lower() not in ['tax','freight'] %}
-        <td class="p-2 align-top {% if col.lower() in ['description','comment'] %}w-1/3 whitespace-nowrap{% elif col.lower() == 'po' %}w-32 whitespace-nowrap{% endif %}">{{ r[col] }}</td>
-        {% endif %}
-        {% endfor %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+        </tbody>
+    </table>
 </div>
 {% endif %}
 {% endif %}

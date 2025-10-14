@@ -67,8 +67,8 @@
         <tr class="text-left border-b">
             <th class="py-1">GL</th>
             <th>Line</th>
-            <th>Budget</th>
-            <th>Description</th>
+            <th style="text-align: right;">Budget&nbsp;</th>
+            <th>&nbsp;Description</th>
             <th>Manager</th>
             <th>
               <span>
@@ -110,6 +110,8 @@
         </form>
     </div>
 </div>
+
+<script src="/static/js/formatting.js"></script>
 
 <script>
     let spinner = document.getElementById('please-wait-spinner');
@@ -171,8 +173,8 @@
                     tr.innerHTML = `
                         <td class="py-1 font-mono">${r.acct5}</td>
                         <td class="font-mono">${r.line}</td>
-                        <td>$${parseFloat(r.budget).toFixed(2)}</td>
-                        <td>${r.budget_desc || ''}</td>
+                        <td class="font-mono" style="padding-right: 0;"> ${fmtRJColumn(r.budget)}</td>
+                        <td>&nbsp;${r.budget_desc || ''}</td>
                         <td>${managerMap[r.manager_id] || ''}</td>
                         <td>
                             <img onclick="addGlLine('${r.acct5}');" src="/static/plus-square-solid.svg" height="16" width="16">
@@ -181,8 +183,8 @@
                     tr.innerHTML = `
                         <td class="py-1 font-mono">&nbsp;</td>
                         <td class="font-mono">${r.line}</td>
-                        <td>$${parseFloat(r.budget).toFixed(2)}</td>
-                        <td>${r.budget_desc || ''}</td>
+                        <td class="font-mono" style="padding-right: 0;"> ${fmtRJColumn(r.budget)}</td>
+                        <td>&nbsp;${r.budget_desc || ''}</td>
                         <td>&nbsp;</td>
                         <td>
                             <img onclick="editGlLine('${r.acct5}', '${r.line}');" src="/static/pen-square-solid.svg" height="16" width="16">

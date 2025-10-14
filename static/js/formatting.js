@@ -1,5 +1,6 @@
 
 function fmtAcctNum(value) {
+    // Accounting number format
     // Formats a number in accounting style: negative numbers are enclosed in parentheses
 
     if (value === null || value === undefined || isNaN(value)) {
@@ -25,5 +26,27 @@ function fmtAcctNum(value) {
             result = formattedNumber;
         }
     }
+    return result;
+}
+
+function fmtRJColumn(value, signChar = '$') {
+    // Right-justified column format with $ sign to left.
+    const actual = fmtAcctNum(value);
+    let rightChar = '&nbsp;';
+    let result = '';
+
+    result += `<span style="display: flex; justify-content: space-between; width:100%;">`;
+    if (actual === '-') {
+        sign = '&nbsp;';
+    } else {
+        sign = '&nbsp;' + signChar;
+    }
+    // if last character of actual is ")", then set rightChar to ''
+    if (actual.endsWith(')')) {
+        rightChar = '';
+    }
+    result += `<span style="text-align: left;">${sign}</span>`;
+    result += `<span style="text-align: right; flex:1;">${actual}${rightChar}</span>`;
+    result += `</span>`;
     return result;
 }

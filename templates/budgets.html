@@ -89,7 +89,7 @@
 <!-- Add a modal dialog for adding GL lines -->
 <div id="add-gl-line-modal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center">
     <div class="bg-white p-6 rounded shadow-md w-96">
-        <h2 class="text-lg font-semibold mb-4">Add GL Line</h2>
+        <h2 class="text-lg font-semibold mb-4" id="addGlLineForm">Add GL Line</h2>
         <form id="add-gl-line-form">
             <div class="mb-4">
                 <label for="line-number" class="block text-sm font-medium">Line Number</label>
@@ -305,6 +305,10 @@
         const modal = document.getElementById('add-gl-line-modal');
         const form = document.getElementById('add-gl-line-form');
         const cancelBtn = document.getElementById('cancel-add-gl-line');
+        const title = document.getElementById('addGlLineForm');
+
+        // set title to include the gl
+        title.textContent = 'Add GL Line for:' + gl;
 
         // Show the modal
         modal.classList.remove('hidden');

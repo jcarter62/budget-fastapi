@@ -33,40 +33,41 @@ window.addEventListener('DOMContentLoaded', function() {
   <h2 class="text-lg font-semibold">Accounts</h2>
   <div class="flex gap-2">
     <form method="post" action="/api/accounts/import" onsubmit="return confirm('Import accounts from SQL? This will add new accounts and update descriptions of existing ones.');">
-      <button class="bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
+      <button class="admin-control bg-emerald-600 text-white px-3 py-1 rounded">Import from SQL</button>
     </form>
     <form method="post" action="/api/accounts/delete-all" onsubmit="return confirm('Delete ALL accounts? This cannot be undone.');">
-      <button class="bg-red-600 text-white px-3 py-1 rounded">Delete All Accounts</button>
+      <button class="admin-control bg-red-600 text-white px-3 py-1 rounded">Delete All Accounts</button>
     </form>
   </div>
 </div>
 
-<section class="bg-white p-4 rounded-xl shadow">
-  <h2 class="font-semibold mb-2 flex items-center justify-between">
-    Manage Accounts
-    <button type="button" onclick="toggleSection('accounts_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>
-  </h2>
-  <div id="accounts_section">
-    <form method="post" action="/accounts/create" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-      <input class="border rounded p-2" name="key" placeholder="52100-03-31-01-01" required />
-      <input class="border rounded p-2 md:col-span-2" name="description" placeholder="Description" required />
-      <select class="border rounded p-2" name="manager_id">
-        <option value="">(no manager)</option>
-        {% for m in managers|sort(attribute='name') %}
-          <option value="{{m.id}}">{{m.name}}</option>
-        {% endfor %}
-      </select>
-      <div class="md:col-span-4 text-right">
-        <button class="bg-blue-600 text-white px-3 py-1 rounded">Add Account</button>
-      </div>
-    </form>
+<!--<section class="bg-white p-4 rounded-xl shadow">-->
+<!--  <h2 class="font-semibold mb-2 flex items-center justify-between">-->
+<!--    Manage Accounts-->
+<!--    <button type="button" onclick="toggleSection('accounts_section')" class="text-xs bg-gray-200 px-2 rounded">Show/Hide</button>-->
+<!--  </h2>-->
+<!--  <div id="accounts_section">-->
+<!--    <form method="post" action="/accounts/create" class="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">-->
+<!--      <input class="border rounded p-2" name="key" placeholder="52100-03-31-01-01" required />-->
+<!--      <input class="border rounded p-2 md:col-span-2" name="description" placeholder="Description" required />-->
+<!--      <select class="border rounded p-2" name="manager_id">-->
+<!--        <option value="">(no manager)</option>-->
+<!--        {% for m in managers|sort(attribute='name') %}-->
+<!--          <option value="{{m.id}}">{{m.name}}</option>-->
+<!--        {% endfor %}-->
+<!--      </select>-->
+<!--      <div class="md:col-span-4 text-right">-->
+<!--        <button class="bg-blue-600 text-white px-3 py-1 rounded">Add Account</button>-->
+<!--      </div>-->
+<!--    </form>-->
+
     <table class="w-full text-sm" id="accounts-table">
       <thead>
         <tr>
           <th><input type="text" id="filter-gl" class="border rounded p-1 w-full" placeholder="Filter GL" /></th>
           <th><input type="text" id="filter-desc" class="border rounded p-1 w-full" placeholder="Filter Description" /></th>
           <th>
-            <select id="filter-manager" class="border rounded p-1 w-full">
+            <select id="filter-manager" class="admin-control border rounded p-1 w-full">
               <option value="">All Managers</option>
               {% for m in managers|sort(attribute='name') %}
                 <option value="{{m.id}}">{{m.name}}</option>
@@ -109,9 +110,9 @@ window.addEventListener('DOMContentLoaded', function() {
             {{ m.name if m else '' }}
           </td>
           <td class="text-right">
-            <a href="/accounts/edit/{{a.id}}" class="text-blue-600 underline mr-2">Edit</a>
+            <a href="/accounts/edit/{{a.id}}" class="admin-control text-blue-600 underline mr-2">Edit</a>
             <form method="post" action="/accounts/delete/{{a.id}}" style="display:inline" onsubmit="return confirm('Delete account?')">
-              <button class="text-red-600">Delete</button>
+              <button class="admin-control text-red-600">Delete</button>
             </form>
           </td>
         </tr>

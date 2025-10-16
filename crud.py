@@ -12,6 +12,10 @@ def list_managers(db: Session):
 def get_manager(db: Session, id: str):
     return db.get(models.Manager, id)
 
+def get_manager_id_by_name(db: Session, name: str) -> str | None:
+    obj = db.execute(select(models.Manager).where(models.Manager.name == name)).scalars().first()
+    return obj.id if obj else None
+
 def create_manager(db: Session, mgr: schemas.ManagerCreate):
     obj = models.Manager(id=mgr.id, name=mgr.name, isdefault='N')
     db.add(obj); db.commit(); db.refresh(obj); return obj

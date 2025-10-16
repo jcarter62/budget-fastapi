@@ -53,7 +53,7 @@ class DB:
         """
         # determine if running in test mode
 
-        settings_loader()  # Load settings into environment variables
+        # settings_loader()  # Load settings into environment variables
         self._server = getenv('SQLSERVER', default='localhost')
         self._instance = getenv('INSTANCE', default='')
         self._database = getenv('DATABASE', default='database')

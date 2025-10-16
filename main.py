@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, Form, Body
+from fastapi import (FastAPI, Request, Depends, Form, Body, HTTPException)
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -12,6 +12,8 @@ from utils.middleware import ContextProcessorMiddleware
 from dotenv import load_dotenv
 from sqlalchemy import text, select, func
 import crud
+import requests
+from auth import Auth
 
 load_dotenv()  # Load environment variables from .env file
 
@@ -157,12 +159,24 @@ def build_actual_items(db, acct5_filter=None, desc_filter=None, vendor_filter=No
 # Pages
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(get_db)):
+    auth = Auth(request)
+    if not auth.is_authenticated():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
     managers = crud.list_managers(db)
     accounts = crud.list_accounts(db)
     actuals = crud.list_actuals(db)
     qp = request.query_params
     acct5_filter = qp.get('acct5') or None
-    return templates.TemplateResponse("index.html", {"request": request, "managers": managers, "accounts": accounts, "actuals": actuals, "acct5_filter": acct5_filter, **request.state.context})
+
+    return templates.TemplateResponse("index.html", {"request": request,
+                                                     "managers": managers,
+                                                     "accounts": accounts,
+                                                     "actuals": actuals,
+                                                     "acct5_filter": acct5_filter,
+                                                     **request.state.context
+                                                     }
+                                      )
 
 @app.get("/managers", response_class=HTMLResponse)
 def managers_page(request: Request, db: Session = Depends(get_db)):
@@ -219,7 +233,7 @@ def managers_edit_get(id: str, request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("managers.html", {"request": request, "managers": managers, "edit_manager": edit_manager, **request.state.context})
 
 @app.post("/managers/edit/{id}")
-def managers_edit_post(id: str, name: str = Form(...), isdefault: str = Form(...), db: Session = Depends(get_db)):
+def managers_edit_post(id: str, name: str = Form(...), isdefault: str = Form(''), db: Session = Depends(get_db)):
     crud.update_manager(db, id, schemas.ManagerBase(name=name), isdefault=isdefault)
     return RedirectResponse("/managers", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -491,6 +505,151 @@ def voucher_lines_html(request: Request, vouchno: str = None, db: Session = Depe
                                        "shipping": shipping,
                                        "total_amount": total_amount,})
 
+@app.get("/login", response_class=HTMLResponse)
+def login_get(request: Request):
+    return templates.TemplateResponse("login.html", {"request": request, **request.state.context})
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_post(request: Request):
+    def encode64(s):
+        import base64
+        s = s.encode('utf-8')
+        bytes = base64.b64encode(s)
+        result = bytes.decode('ascii')
+        return result
+
+    """Process the login form."""
+    form = await request.form()
+    username = form.get("username")
+    password = form.get("password")
+    user64 = encode64(username)
+
+    load_dotenv()  # Ensure .env is loaded for environment variables
+    api_url = os.getenv("AUTH_API", None)
+    admin_groups = os.getenv("AUTH_ADMIN_GROUPS", "").split(",")
+    mgr_groups = os.getenv("AUTH_MGR_GROUPS", "").split(",")
+
+    if not api_url or not admin_groups or not mgr_groups:
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "error": "Authentication API not configured"},
+        )
+    url = f"{api_url}"
+    if url.endswith("/"):
+        url = url[:-1]
+    api_url = url  # Store base URL for later use
+    #
+    # init cookie values
+    #
+    token = ""
+    isAdmin = "0"
+    isMgr = "0"
+    user = user64
+    uid = ""
+    match_found = False
+    #
+    # for each admin group, try to authenticate
+    #
+    for group in admin_groups:
+        if not group.strip():
+            continue
+        url = f"{api_url}/{group.strip()}"
+        headers = {"Content-Type": "application/json"}
+        body = {"username": username, "password": password}
+        response = requests.post(url, json=body, headers=headers)
+        if response.status_code == 200:
+            # Authentication successful
+            token = create_session_token(username)
+            isAdmin = "1"
+            isMgr = "0"
+            match_found = True
+
+    if not match_found:
+        #
+        # for each mgr group, try to authenticate
+        #
+        for group in mgr_groups:
+            if not group.strip():
+                continue
+            url = f"{api_url}/{group.strip()}"
+            headers = {"Content-Type": "application/json"}
+            body = {"username": username, "password": password}
+            response = requests.post(url, json=body, headers=headers)
+            if response.status_code == 200:
+                # Authentication successful
+                token = create_session_token(username)
+                isAdmin = "0"
+                isMgr = "1"
+                match_found = True
+
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    if match_found:
+        # lookup uid if possible, so we don't need to look it up later.
+        try:
+            from db import SessionLocal
+            db = SessionLocal()
+            from crud import get_manager_id_by_name
+            mgr = get_manager_id_by_name(db, username)
+            if mgr:
+                uid =  encode64(mgr)
+        except Exception:
+            pass
+        # Set cookies
+        response.set_cookie(
+            key="session",
+            value=token,
+            httponly=False,
+            max_age=86400,
+            path="/",
+        )
+        response.set_cookie(
+            key="user",
+            value=user64,
+            httponly=False,
+            max_age=86400,
+            path="/",
+        )
+        response.set_cookie(
+            key="isAdmin",
+            value=isAdmin,
+            httponly=False,
+            max_age=86400,
+            path="/",
+        )
+        response.set_cookie(
+            key="isMgr",
+            value=isMgr,
+            httponly=False,
+            max_age=86400,
+            path="/",
+        )
+        response.set_cookie(
+            key="uid",
+            value=uid,
+            httponly=False,
+            max_age=86400,
+            path="/",
+        )
+    if match_found:
+        return response
+    else:
+        return templates.TemplateResponse("login.html",
+            {"request": request, "error": "Invalid credentials"},)
+
+
+@app.get("/logout", response_class=HTMLResponse)
+async def logout_get(request: Request):
+    response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
+    response.delete_cookie(key="session", path="/")
+    response.delete_cookie(key="isAdmin", path="/")
+    response.delete_cookie(key="isMgr", path="/")
+    response.delete_cookie(key="user", path="/")
+    response.delete_cookie(key="uid", path="/")
+    return response
+
+#
+# Jinja2 custom filters
+#
 def currency(value):
     try:
         return "{:,.2f}".format(float(value))
@@ -498,3 +657,51 @@ def currency(value):
         return value
 
 templates.env.filters['currency'] = currency
+
+
+# ---------------------------------------------------------------------------
+# Authentication helpers
+from auth import Auth
+
+def require_login(request: Request) -> None:
+    """Raise HTTPException if the current user is not authenticated."""
+    if not Auth().is_authenticated(request):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+######## Session token creation and verification ########
+
+SECRET_SESSION_KEY = os.environ.get("SECRET_KEY", "replace-with-random-key")
+
+import time
+import hmac
+import hashlib
+import base64
+from typing import Optional
+
+
+def create_session_token(username: str) -> str:
+    """Return a signed session token for the given username."""
+    timestamp = str(int(time.time()))
+    data = f"{username}:{timestamp}"
+    signature = hmac.new(SECRET_SESSION_KEY.encode(), data.encode(), hashlib.sha256).hexdigest()
+    token_raw = f"{data}:{signature}".encode()
+    return base64.urlsafe_b64encode(token_raw).decode()
+
+
+def verify_session_token(token: str) -> Optional[str]:
+    """Return the username if token is valid, otherwise None."""
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode()).decode()
+        username, timestamp, signature = decoded.split(":")
+        expected_signature = hmac.new(SECRET_SESSION_KEY.encode(), f"{username}:{timestamp}".encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected_signature):
+            return None
+        # Optionally enforce expiry (e.g., 1 day)
+        # Here we allow tokens for 24 hours
+        if time.time() - float(timestamp) > 86400:
+            return None
+        return username
+    except Exception:
+        return None
+
+

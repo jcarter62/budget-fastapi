@@ -1,5 +1,4 @@
 import uuid
-
 from fastapi import (APIRouter, Depends, HTTPException,
                      UploadFile, File, Request)
 from fastapi import status
@@ -38,6 +37,16 @@ def managers_delete(id: str, db: Session = Depends(get_db)):
     ok = crud.delete_manager(db, id)
     if not ok: raise HTTPException(404, "Not found")
     return {"ok": True}
+
+@router.post("/managers/get_manager_id/{userName}")
+def get_manager_id(userName: str, db: Session = Depends(get_db)):
+    mgr = db.execute(
+        models.Manager.__table__.select().where(models.Manager.name == userName)
+    ).first()
+    if mgr:
+        return {"manager_id": mgr.id}
+    else:
+        return {"manager_id": ''}
 
 # ---- Account routes ----
 @router.get("/accounts", response_model=List[schemas.Account])

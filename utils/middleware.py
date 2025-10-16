@@ -5,15 +5,30 @@ import os
 import json
 from dotenv import load_dotenv
 from starlette.responses import Response
+from auth import Auth
 
 load_dotenv()  # Load environment variables from .env file
 
 class ContextProcessorMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Prepare base context for this request
+
+        # determine if user is logged in, and if admin
+        auth_instance = Auth(request)
+
+        auth = {
+            "is_authenticated": auth_instance.is_authenticated(),
+            "is_admin": auth_instance.is_admin(),
+            "is_manager": auth_instance.is_manager(),
+            "user_id": auth_instance.user_id,
+            "username": auth_instance.username,
+        }
+
         request.state.context = {
             "appname": os.environ.get("APPNAME", "App Name"),
+            "auth": auth,
         }
+
         response: Response = await call_next(request)
         # If this is a TemplateResponse (FastAPI/Starlette adds 'context') ensure appname exists
         if hasattr(response, "context") and isinstance(getattr(response, "context", None), dict):

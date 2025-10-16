@@ -1,1 +1,26 @@
 /* add custom styles here */
+
+
+/* css */
+.disabled,
+.disabled[aria-disabled="true"] {
+    opacity: 0.5;                 /* dim the element */
+    color: #6c757d;               /* muted color (adjust to your theme) */
+    pointer-events: none;         /* prevent mouse interactions */
+    cursor: not-allowed;          /* show disabled cursor */
+    text-decoration: none;        /* remove underline for links */
+}
+
+/* prevent hover effects from changing appearance */
+.disabled:hover,
+.disabled[aria-disabled="true"]:hover {
+    text-decoration: none;
+}
+
+/* keep focus visible if you choose not to remove keyboard focus;
+   if you set tabindex="-1" on disabled anchors, you can hide focus styles */
+.disabled:focus {
+    outline: 2px solid transparent;
+    box-shadow: none;
+}
+

@@ -25,11 +25,11 @@
             <h2 class="font-semibold">Budgets</h2>
             <div class="flex gap-2">
                 <!-- Replaced HTML form with a plain button that triggers JS fetch to /api/budgets/import -->
-                <button id="importBudgets00" type="button" class="border rounded px-3 bg-blue-100 hover:bg-blue-200">
+                <button id="importBudgets00" type="button" class="admin-control border rounded px-3 bg-blue-100 hover:bg-blue-200">
                     Import Budgets
                 </button>
                 <!-- Replace delete form with JS-driven button -->
-                <button id="deleteBudgets00" type="button" class="border rounded px-3 bg-red-100 hover:bg-red-200">
+                <button id="deleteBudgets00" type="button" class="admin-control border rounded px-3 bg-red-100 hover:bg-red-200">
                     Delete Imported Budgets
                 </button>
             </div>
@@ -51,7 +51,7 @@
             </div>
             <div>
                 <label for="filter-manager" class="block text-sm font-medium">Manager</label>
-                <select id="filter-manager" class="border rounded px-2 py-1">
+                <select id="filter-manager" class="admin-control border rounded px-2 py-1">
                     <option value="">All</option>
                     {% for m in managers %}
                     <option value="{{m.id}}">{{m.name}}</option>
@@ -292,7 +292,9 @@
         clearBtn.addEventListener('click', function () {
             filterGL.value = '';
             filterDesc.value = '';
-            filterManager.value = '';
+            if (userRole === 'admin') {
+                filterManager.value = '';
+            }
             saveFilters();
             fetchAndRender();
         });

@@ -3,25 +3,37 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{{ appname }}</title>
+    <title id="base-title">{{ appname }}</title>
     <!-- Tailwind via CDN for simplicity -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/static/css/styles.css" />
   </head>
+  {% macro nav_link(href, text) -%}
+    <a class="text-blue-700 hover:underline" href="{{href}}">{{text}}</a>
+  {%- endmacro %}
+
   <body class="bg-slate-50 text-slate-900">
     <div class="max-w-7xl mx-auto p-6">
         <a href="/"><h1 class="text-2xl font-bold mb-4">{{appname}}</h1></a>
       <!-- Global Menu -->
       <nav class="mb-6">
         <ul class="flex gap-4 text-sm">
-          <li><a class="text-blue-700 hover:underline" href="/">Home</a></li>
-          <li><a class="text-blue-700 hover:underline" href="/accounts">Accounts</a></li>
-          <li><a class="text-blue-700 hover:underline" href="/budgets">Budgets</a></li>
-          <li><a class="text-blue-700 hover:underline" href="/actuals">Actuals</a></li>
-          <li><a class="text-blue-700 hover:underline" href="/managers">Managers</a></li>
-          <li><a class="text-blue-700 hover:underline" href="/assign">Assign Manager</a></li>
+          <li>{{ nav_link('/','Home') }}</li>
+          <li>{{ nav_link('/accounts', 'Accounts') }}</li>
+          <li>{{ nav_link('/budgets','Budgets') }}</li>
+          <li>{{ nav_link('/actuals','Actuals') }}</li>
+          <li class="admin-control">{{ nav_link('/managers','Managers') }}</li>
+          <li class="admin-control">{{ nav_link('/assign','Assign Manager') }}</li>
+          <li id="login-link" style="display:block;">
+              {{ nav_link('/login','Login') }}
+          </li>
+            <li id="logout-link" style="display:none;">
+              {{ nav_link('/logout','Logout') }}
+            </li>
         </ul>
       </nav>
       {% block content %}{% endblock %}
     </div>
   </body>
+  <script src="/static/js/misc.js"></script>
 </html>

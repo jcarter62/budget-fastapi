@@ -180,11 +180,19 @@ def home(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/managers", response_class=HTMLResponse)
 def managers_page(request: Request, db: Session = Depends(get_db)):
+    auth = Auth(request)
+    if not auth.is_authenticated():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
     managers = crud.list_managers(db)
     return templates.TemplateResponse("managers.html", {"request": request, "managers": managers, **request.state.context})
 
 @app.get("/accounts", response_class=HTMLResponse)
 def accounts_page(request: Request, db: Session = Depends(get_db)):
+    auth = Auth(request)
+    if not auth.is_authenticated():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
     managers = crud.list_managers(db)
     accounts = crud.list_accounts(db)
     qp = request.query_params
@@ -205,12 +213,20 @@ def accounts_page(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/budgets", response_class=HTMLResponse)
 def budgets_page(request: Request, db: Session = Depends(get_db)):
+    auth = Auth(request)
+    if not auth.is_authenticated():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
     managers = crud.list_managers(db)
     accounts = crud.list_accounts(db)
     return templates.TemplateResponse("budgets.html", {"request": request, "accounts": accounts, "managers": managers, **request.state.context})
 
 @app.get("/assign", response_class=HTMLResponse)
 def assign_page(request: Request, db: Session = Depends(get_db)):
+    auth = Auth(request)
+    if not auth.is_authenticated():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
     managers = crud.list_managers(db)
     accounts = crud.list_accounts(db)
     return templates.TemplateResponse("assign.html", {"request": request, "managers": managers, "accounts": accounts, **request.state.context})
@@ -426,6 +442,10 @@ def budget_next_line(acct5: str, db: Session = Depends(get_db)):
 
 @app.get("/actuals", response_class=HTMLResponse)
 def actuals_page(request: Request, db: Session = Depends(get_db)):
+    auth = Auth(request)
+    if not auth.is_authenticated():
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+
     managers = crud.list_managers(db)
     accounts = crud.list_accounts(db)
     return templates.TemplateResponse("actuals.html", {"request": request, "managers": managers, "accounts": accounts, **request.state.context})

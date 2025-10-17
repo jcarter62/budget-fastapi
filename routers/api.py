@@ -78,6 +78,22 @@ def budget_list(db: Session = Depends(get_db)):
 def budget_create(it: schemas.LineItemCreate, db: Session = Depends(get_db)):
     return crud.create_budget_item(db, it)
 
+@router.get("/budget/next-line/{acct5}")
+def budget_next_line(acct5: str, db: Session = Depends(get_db)):
+    # determine the maximum line for this acct5
+    items = crud.list_budget(db)
+    max_line = -1
+    for it in items:
+        if it.acct5 == acct5:
+            try:
+                line_num = int(it.line)
+                if line_num > max_line:
+                    max_line = line_num
+            except Exception:
+                pass
+    next_line_num = f"{max_line + 1:02d}"
+    return {"next_line": next_line_num}
+
 @router.post("/budget/add/line/{gl}/{line}/{amount}/{desc}")
 def budget_add_line(
         gl: str, line: str, amount: float, desc: str,

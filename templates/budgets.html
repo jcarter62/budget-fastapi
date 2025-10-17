@@ -93,7 +93,7 @@
         <form id="add-gl-line-form">
             <div class="mb-4">
                 <label for="line-number" class="block text-sm font-medium">Line Number</label>
-                <input id="line-number" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter line number (e.g., 01)" required>
+                <input disabled id="line-number" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter line number (e.g., 01)" required>
             </div>
             <div class="mb-4">
                 <label for="budget-amount" class="block text-sm font-medium">Budget Amount</label>
@@ -310,6 +310,23 @@
         const form = document.getElementById('add-gl-line-form');
         const cancelBtn = document.getElementById('cancel-add-gl-line');
         const title = document.getElementById('addGlLineForm');
+
+        let line_url = '/api/budget/next-line/' + encodeURIComponent(gl);
+        fetch(line_url, {
+            method: 'GET',
+            headers: {'Content-Type': 'application/json'}
+        })
+        .then(function (resp) {
+            if (resp.ok) {
+                return resp.json();
+            } else {
+                throw new Error('HTTP ' + resp.status);
+            }
+        })
+        .then(function (data) {
+            let new_line = data.next_line;
+            document.getElementById('line-number').value = new_line;
+        });
 
         // set title to include the gl
         title.textContent = 'Add GL Line for:' + gl;

@@ -7,27 +7,32 @@ import schemas
 
 # ---------- Managers ----------
 def list_managers(db: Session):
-    return db.execute(select(models.Manager)).scalars().all()
+    mgrs = db.execute(select(models.Manager))
+    mgrs = mgrs.scalars()
+    mgrs = mgrs.all()
+    return mgrs
 
 def get_manager(db: Session, id: str):
-    return db.get(models.Manager, id)
+    mgr = db.get(models.Manager, id)
+    return mgr
 
 def get_manager_id_by_name(db: Session, name: str) -> str | None:
     obj = db.execute(select(models.Manager).where(models.Manager.name == name)).scalars().first()
     return obj.id if obj else None
 
 def create_manager(db: Session, mgr: schemas.ManagerCreate):
-    obj = models.Manager(id=mgr.id, name=mgr.name, isdefault='N')
+    obj = models.Manager(id=mgr.id, name=mgr.name, isdefault='No', isadmin='No')
     db.add(obj); db.commit(); db.refresh(obj); return obj
 
-def update_manager(db: Session, id: str, mgr: schemas.ManagerBase, isdefault: str = 'N'):
+def update_manager(db: Session, id: str, mgr: schemas.ManagerBase, isdefault: str = 'off', isadmin: str = 'off'):
     obj = get_manager(db, id)
     if not obj:
         return None
     obj.name = mgr.name
+    obj.isadmin = isadmin
     obj.isdefault = isdefault
     if isdefault == 'on':
-        # Reset other managers' isdefault to 'N'
+        # Reset other managers' isdefault to 'off'
         db.execute(
             models.Manager.__table__.update().where(models.Manager.id != id).values(isdefault='off')
         )
@@ -39,12 +44,76 @@ def delete_manager(db: Session, id: str):
         return False
     db.delete(obj); db.commit(); return True
 
+# ---------- Account-Managers ----------
+
+def list_acct_mgrs(db: Session):
+    result = db.execute(select(models.AcctMgr)).scalars().all()
+    return result
+
+def get_acct_mgr(db: Session, id: str):
+    return db.get(models.AcctMgr, id)
+
+def get_acct_mgr_by_key_mgr(db: Session, key: str, manager_id: str):
+    result = None
+    try:
+        result = (db.execute(
+                select(models.AcctMgr)
+                .where(models.AcctMgr.key == key, models.AcctMgr.manager_id == manager_id))
+                .scalars().first()
+              )
+    except Exception:
+        result = None
+
+    return result
+
+def create_acct_mgr(db: Session, am: schemas.AcctMgrCreate):
+    obj = models.AcctMgr(id=am.id, key=am.key, manager_id=am.manager_id)
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return
+
+def delete_acct_mgr(db: Session, record_id: str):
+    obj = get_acct_mgr(db, record_id)
+    if not obj:
+        return False
+    db.delete(obj)
+    db.commit()
+    return True
+
+
 # ---------- Accounts ----------
 def list_accounts(db: Session):
     return db.execute(select(models.Account)).scalars().all()
 
+def account_list(db: Session, filter_acct: str | None = None,
+                 filter_desc: str | None = None, filter_manager: str | None = None) -> []:
+    results = []
+    if filter_manager:
+        query = select(models.Account).join(models.AcctMgr, models.Account.key == models.AcctMgr.key)
+        query = query.where(models.AcctMgr.manager_id == filter_manager)
+    else:
+        query = select(models.Account)
+    if filter_acct:
+        query = query.where(models.Account.key.like(f"%{filter_acct}%"))
+    if filter_desc:
+        query = query.where(models.Account.description.like(f"%{filter_desc}%"))
+
+    accounts = db.execute(query).scalars().all()
+    # return only account keys
+    for acc in accounts:
+        if (acc.key):
+            if (acc.key.strip() != ""):
+                results.append(acc.key)
+
+    return results
+
 def get_account(db: Session, id: str):
     return db.get(models.Account, id)
+
+def get_account_glkey(db: Session, id: str):
+    obj = get_account(db, id)
+    return obj.key if obj else None
 
 def create_account(db: Session, acc: schemas.AccountCreate):
     obj = models.Account(id=acc.id, key=acc.key, description=acc.description, manager_id=acc.manager_id)
@@ -204,3 +273,60 @@ def next_line_for_account(db: Session, table, acct5: str) -> str:
     max_line = db.query(func.max(func.cast(table.line, Float))).filter(table.acct5 == acct5).scalar()
     n = int(max_line or 0) + 1
     return f"{n:02d}"
+
+
+def get_budget_total_for_account(db, a:str) -> float | None:
+    result = db.execute(
+        select(models.BudgetItem.amount).where(models.BudgetItem.acct5 == a)
+    ).scalar()
+    if result is None:
+        result = 0.0
+    return result
+
+
+def get_actual_total_for_account(db, a:str) -> float | None:
+    # calculate the sum of actual_items.amount where acct5 == a
+    result = db.execute(
+        select(func.sum(models.ActualItem.amount)).where(models.ActualItem.acct5 == a)
+    ).scalar_one_or_none()
+    return float(result) if result is not None else 0.0
+
+def get_account_description_for_account(db, a:str) -> str | None:
+    result = db.execute(
+        select(models.Account.description).where(models.Account.key == a)
+    ).scalar()
+    if result is None:
+        result = ""
+    return result
+
+
+def actuals_get_by_account_vendor(db, account, filter_vendor):
+    stmt = select(models.ActualItem)
+    conds = []
+    # If filtering by manager, join Account and add condition on manager_id
+    if account:
+        conds.append(models.ActualItem.acct5 == account)
+    if filter_vendor:
+        pat = f"%{filter_vendor.lower()}%"
+        conds.append(func.lower(func.coalesce(models.ActualItem.vendor_name, '')).like(pat))
+
+    if conds:
+        stmt = stmt.where(and_(*conds))
+    return db.execute(stmt).scalars().all()
+
+
+def get_managers_for_account(db, a):
+    results = []
+    acct_mgrs = db.execute(
+        select(models.AcctMgr).where(models.AcctMgr.key == a)
+    ).scalars().all()
+    for am in acct_mgrs:
+        mgr_id = get_manager(db, am.manager_id)
+        mgr_name = mgr_id.name if mgr_id else ""
+        mgr = {
+            "id": am.manager_id,
+            "name": mgr_name
+        }
+        if mgr:
+            results.append(mgr)
+    return results

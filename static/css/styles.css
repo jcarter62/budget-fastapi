@@ -24,3 +24,14 @@
     box-shadow: none;
 }
 
+/* format an onclick element to look like a link */
+.onclick-link {
+    color: #1d4ddc;               /* link color (adjust to your theme) */
+    text-decoration: underline;   /* underline to indicate link */
+    cursor: pointer;              /* pointer cursor on hover */
+}
+.onclick-link:hover {
+    color: #0056b3;               /* darker link color on hover */
+    text-decoration: underline;   /* maintain underline on hover */
+}
+

@@ -33,15 +33,19 @@ window.addEventListener('DOMContentLoaded', function() {
       <li class="flex items-center justify-between">
         {% if edit_manager and edit_manager.id == m.id %}
           <form method="post" action="/managers/edit/{{m.id}}" class="flex gap-2">
-            <input class="border rounded p-2 flex-1" name="name" value="{{m.name}}" required />
-            <label for="isdefault_{{m.id}}" class="flex items-center gap-1"> Default</label>
-            <input type="checkbox" name="isdefault" id="isdefault_{{m.id}}" {{ 'checked' if m.isdefault == 'on' else '' }} />
+              <input class="border rounded p-2 flex-1" name="name" value="{{m.name}}" required />
+              <label for="isdefault_{{m.id}}" class="flex items-center gap-1"> Default</label>
+              <input type="checkbox" name="isdefault" id="isdefault_{{m.id}}" {{ 'checked' if m.isdefault == 'on' else 'off' }} />
+              &nbsp;
+              <label for="isadmin_{{m.id}}" class="flex items-center gap-1"> Admin</label>
+              <input type="checkbox" name="isadmin" id="isadmin_{{m.id}}" {{ 'checked' if m.isadmin == 'on' else 'off' }} />
             <button class="bg-blue-600 text-white px-3 rounded">Save</button>
           </form>
         {% else %}
           <span>
             {{ m.name }}
             {{ '&nbsp;-&nbsp;Default Manager'|safe if m.isdefault == 'on' else '' }}
+            {{ '&nbsp;-&nbsp;Admin'|safe if m.isadmin == 'on' else '' }}
           </span>
           <div>
             <a href="/managers/edit/{{m.id}}" class="text-blue-600 underline mr-2">Edit</a>

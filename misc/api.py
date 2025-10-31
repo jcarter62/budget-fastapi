@@ -1,12 +1,11 @@
 import uuid
 from fastapi import (APIRouter, Depends, HTTPException,
-                     UploadFile, File, Request)
+                     UploadFile, File, Request, Query)
 from fastapi import status
 from typing import List, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import Table, MetaData
 from starlette.responses import RedirectResponse
-
 from db import get_db
 from data.data import Data
 import models
@@ -15,7 +14,7 @@ import crud
 import csv, io
 from fastapi.responses import JSONResponse
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", tags=["api"])
 
 # ---- Manager routes (single-record writes) ----
 @router.get("/managers", response_model=List[schemas.Manager])
@@ -47,6 +46,30 @@ def get_manager_id(userName: str, db: Session = Depends(get_db)):
         return {"manager_id": mgr.id}
     else:
         return {"manager_id": ''}
+
+@router.get("/managers-for-account/{key}")
+def get_managers_for_account(key: str, db: Session = Depends(get_db)):
+    mgrs = db.execute(
+        models.AcctMgr.__table__.select().where(models.AcctMgr.key == key)
+    ).all()
+    managers = []
+    for am in mgrs:
+        mgr = crud.get_manager(db, am.manager_id)
+        if mgr:
+            managers.append({"id": mgr.id, "name": mgr.name})
+    return { "gl": key, "managers": managers }
+
+@router.get("/managers-for-accounts")
+def get_managers_for_accounts(db: Session = Depends(get_db)):
+    mgrs = db.execute(
+        models.AcctMgr.__table__.select()
+    ).all()
+    r = []
+    for a in mgrs:
+        mgr = crud.get_manager(db, a.manager_id)
+        record = {"key": a.key, "id": mgr.id, "name": mgr.name}
+        r.append(record)
+    return r
 
 # ---- Account routes ----
 @router.get("/accounts", response_model=List[schemas.Account])
@@ -232,40 +255,34 @@ def next_line(kind: str, acct5: str, db: Session = Depends(get_db)):
     else:
         raise HTTPException(400, "Unknown kind")
 
-@router.get("/actual-items")
-def api_actual_items(request: Request, db: Session = Depends(get_db)):
-    qp = request.query_params
-    acct5_filter = qp.get('acct5') or None
-    desc_filter = qp.get('description') or None
-    vendor_filter = qp.get('vendor') or None
-    manager_filter = qp.get('manager') or None
-    accounts = crud.list_accounts(db)
-    actuals = crud.list_actuals(db)
-    acct_manager_map = {a.key: a.manager_id for a in accounts}
+@router.get("/actual-items", operation_id="get_actual_items")
+def api_actual_items(account: str | None = Query(default=None, description="Filter by Account", alias="acct5"),
+                     description: str | None = Query(default=None, description="Filter by Description"),
+                     manager: str | None = Query(default=None, description="Filter by Manager"),
+                     vendor: str | None = Query(default=None, description="Filter by Vendor Text"),
+                     db: Session = Depends(get_db)):
+
+    accounts = crud.account_list(db, filter_acct=account, filter_desc=description, filter_manager=manager)
+    # we know the accounts to include, now retrieve the actual items.
+
     items = []
-    for a in actuals:
-        if acct5_filter and a.acct5 != acct5_filter:
-            continue
-        if manager_filter and acct_manager_map.get(a.acct5) != manager_filter:
-            continue
-        if desc_filter and desc_filter.lower() not in (a.description or '').lower():
-            continue
-        if vendor_filter and vendor_filter.lower() not in (getattr(a, 'vendor_name', '') or '').lower():
-            continue
-        items.append({
-            "acct5": a.acct5,
-            "line": a.line,
-            "amount": a.amount,
-            "description": a.description,
-            "tr_date": getattr(a, 'tr_date', None),
-            "vendor_name": getattr(a, 'vendor_name', None),
-            "vouchno": getattr(a, 'vouchno', None),
-            "manager_id": acct_manager_map.get(a.acct5)
-        })
-    items.sort(key=lambda r: (r["acct5"], r["line"]))
+    for a in accounts:
+        actuals = crud.actuals_get_by_account_vendor(db, account=a, filter_vendor=vendor)
+        for act in actuals:
+            items.append({
+                "account": a,
+                # "line": a.line,
+                "amount": act.amount,
+                "description": act.description,
+                "tr_date": act.tr_date,
+                "vendor_name": act.vendor_name,
+                "vouchno": act.vouchno
+            })
+
+    items.sort(key=lambda r: (r["account"], r["tr_date"], r["vouchno"]))
     return JSONResponse(content=items)
 
-@router.get("/line-items")
+@router.get("/line-items", operation_id="get_line_items")
 def api_line_items(request: Request, db: Session = Depends(get_db)):
     qp = request.query_params
     acct5_filter = qp.get('acct5') or None
@@ -275,7 +292,8 @@ def api_line_items(request: Request, db: Session = Depends(get_db)):
     accounts = crud.list_accounts(db)
     budget = crud.list_budget(db)
     actuals = crud.list_actuals(db)
-    acct_manager_map = {a.key: a.manager_id for a in accounts}
+    acct_mgrs = crud.list_acct_mgrs(db)
+    acct_manager_map = {a.key: a.manager_id for a in acct_mgrs}
     budget_lookup = {(b.acct5, b.line): b.description for b in budget}
     joined = {}
     for b in budget:
@@ -320,32 +338,94 @@ def api_line_items(request: Request, db: Session = Depends(get_db)):
     items.sort(key=lambda r: (r["acct5"], r["line"]))
     return JSONResponse(content=items)
 
-@router.get("/budget-items")
-def api_budget_items(request: Request, db: Session = Depends(get_db)):
-    qp = request.query_params
-    acct5_filter = qp.get('acct5') or None
-    desc_filter = qp.get('description') or None
-    manager_filter = qp.get('manager') or None
-    accounts = crud.list_accounts(db)
-    budget = crud.list_budget(db)
-    acct_manager_map = {a.key: a.manager_id for a in accounts}
-    items = []
-    for b in budget:
-        if acct5_filter and b.acct5 != acct5_filter:
-            continue
-        if manager_filter and acct_manager_map.get(b.acct5) != manager_filter:
-            continue
-        if desc_filter and desc_filter.lower() not in (b.description or '').lower():
-            continue
-        items.append({
-            "acct5": b.acct5,
-            "line": b.line,
-            "budget": b.amount,
-            "budget_desc": b.description,
-            "manager_id": acct_manager_map.get(b.acct5)
-        })
-    items.sort(key=lambda r: (r["acct5"], r["line"]))
-    return JSONResponse(content=items)
+@router.get("/home-items")
+def api_home_items(
+        account: str | None = Query(default=None, description="Filter by Account", alias="acct5"),
+        description: str | None = Query(default=None, description="Filter by Description"),
+        manager: str | None = Query(default=None, description="Filter by Manager"),
+        db: Session = Depends(get_db)):
+
+    accounts = crud.account_list(db, filter_acct=account, filter_desc=description, filter_manager=manager)
+
+    results = []
+    # for each account, generate object with account, description, budget amount, actual amount, and variance amount
+    for a  in accounts:
+        try:
+            budget_amount = crud.get_budget_total_for_account(db, a)
+            actual_amount = crud.get_actual_total_for_account(db, a)
+            variance_amount = budget_amount - actual_amount
+            desc = crud.get_account_description_for_account(db, a)
+            aobj = {
+                "account": a,
+                "description": desc,
+                "budget": budget_amount,
+                "actual": actual_amount,
+                "variance": variance_amount
+            }
+            results.append(aobj)
+        except Exception as exc:
+            print(f"Error processing account {a}: {exc}")
+
+    # sort results by account
+    results.sort(key=lambda r: r["account"])
+
+    return JSONResponse(content=results)
+
+@router.get("/account-items")
+def api_account_items(
+        account: str | None = Query(default=None, description="Filter by Account", alias="acct5"),
+        description: str | None = Query(default=None, description="Filter by Description"),
+        manager: str | None = Query(default=None, description="Filter by Manager"),
+        db: Session = Depends(get_db)):
+
+    accounts = crud.account_list(db, filter_acct=account, filter_desc=description, filter_manager=manager)
+
+    results = []
+    # for each account, generate object with account, description, budget amount, actual amount, and variance amount
+    for a  in accounts:
+        try:
+            desc = crud.get_account_description_for_account(db, a)
+            aobj = {
+                "account": a,
+                "description": desc,
+            }
+            results.append(aobj)
+        except Exception as exc:
+            print(f"Error processing account {a}: {exc}")
+
+    # sort results by account
+    results.sort(key=lambda r: r["account"])
+
+    return JSONResponse(content=results)
+
+@router.get("/budget-items", operation_id="get_budget_items")
+def api_budget_items(account: str | None = Query(default=None, description="Filter by Account", alias="acct5"),
+                     description: str | None = Query(default=None, description="Filter by Description"),
+                     manager: str | None = Query(default=None, description="Filter by Manager"),
+                     db: Session = Depends(get_db)):
+
+    accounts = crud.account_list(db, filter_acct=account, filter_desc=description, filter_manager=manager)
+
+    results = []
+    # for each account, generate object with account, description, budget amount, actual amount, and variance amount
+    for a  in accounts:
+        try:
+            desc = crud.get_account_description_for_account(db, a)
+            budget_amount = crud.get_budget_total_for_account(db, a)
+            aobj = {
+                "account": a,
+                "description": desc,
+                "budget": budget_amount,
+            }
+            results.append(aobj)
+        except Exception as exc:
+            print(f"Error processing account {a}: {exc}")
+
+    # sort results by account
+    results.sort(key=lambda r: r["account"])
+
+    return JSONResponse(content=results)
+
 
 
 @router.post("/budgets/import", status_code=200)
@@ -468,3 +548,54 @@ def accounts_delete_all(db: Session = Depends(get_db)):
         msg = quote_plus(str(e))
         return RedirectResponse(f"/accounts?msg={msg}", status_code=303)
     return RedirectResponse(f"/accounts?msg=deleted:{deleted}", status_code=200)
+
+@router.get("/assign-items")
+def api_assign_items(
+        account: str | None = Query(default=None, description="Filter by Account", alias="acct5"),
+        manager: str | None = Query(default=None, description="Filter by Manager"),
+        db: Session = Depends(get_db)):
+
+    if manager == '__none__':
+        accounts = crud.account_list(db)
+    else:
+        accounts = crud.account_list(db, filter_manager=manager)
+
+    if account is not None:
+        # search for partial match of account or description
+        term = (account or '').lower().strip()
+        filtered = []
+        if term:
+            for a in accounts:
+                try:
+                    acctrec = crud.get_account_by_key(db, a)
+                    desc = acctrec.description if acctrec else ''
+                    if term in (a or '').lower() or term in (desc or '').lower():
+                        filtered.append(a)
+                except Exception as exc:
+                    print(f"Error processing account {a}: {exc}")
+                    continue
+            accounts = filtered
+
+    results = []
+    # for each account, generate object with account, description, budget amount, actual amount, and variance amount
+    for a  in accounts:
+        try:
+            acctrec = crud.get_account_by_key(db, a)
+            desc = acctrec.description if acctrec else ''
+            id = acctrec.id if acctrec else ''
+            managers = crud.get_managers_for_account(db, a)
+            if manager == '__none__' and managers:
+                # skip accounts that have managers assigned
+                continue
+            aobj = {
+                "account": a,
+                "description": desc,
+                "managers": managers,
+                "id": id,
+            }
+            results.append(aobj)
+        except Exception as exc:
+            print(f"Error processing account {a}: {exc}")
+
+    return JSONResponse(content=results)
+

@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from db import Base, engine, get_db
 import schemas, crud, models
-from routers import api
+from misc import api
 import uuid, os
 from fastapi import status
 from utils.middleware import ContextProcessorMiddleware
@@ -34,6 +34,7 @@ Base.metadata.create_all(bind=engine)
 # Lightweight migration: add vendor_name to actual_items if missing (SQLite)
 with engine.connect() as conn:
     try:
+        # upgrade actual_items if needed.
         cols = conn.execute(text("PRAGMA table_info(actual_items)")).fetchall()
         colnames = [c[1] for c in cols]
         if 'vendor_name' not in colnames:
@@ -43,6 +44,17 @@ with engine.connect() as conn:
             conn.execute(text("ALTER TABLE actual_items ADD COLUMN vouchno TEXT"))
     except Exception as _e:
         pass
+
+with engine.connect() as conn:
+    try:
+        # upgrade managers table.
+        cols = conn.execute(text("PRAGMA table_info(managers)")).fetchall()
+        colnames = [c[1] for c in cols]
+        if 'isadmin' not in colnames:
+            conn.execute(text("ALTER TABLE managers ADD COLUMN isadmin TEXT"))
+    except Exception as _e:
+        pass
+
 
 # API router
 app.include_router(api.router)
@@ -156,6 +168,7 @@ def build_actual_items(db, acct5_filter=None, desc_filter=None, vendor_filter=No
     items.sort(key=lambda r: (r["acct5"], r["line"]))
     return items
 
+
 # Pages
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(get_db)):
@@ -164,15 +177,21 @@ def home(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
     managers = crud.list_managers(db)
-    accounts = crud.list_accounts(db)
-    actuals = crud.list_actuals(db)
+    # accounts = crud.list_accounts(db)
+    #
+    # # Add managers to accounts
+    # for a in accounts:
+    #     a.mgrs = api.get_managers_for_account(a.key, db)
+    #
+    # actuals = crud.list_actuals(db)
     qp = request.query_params
-    acct5_filter = qp.get('acct5') or None
+    acct5_filter = qp.get('acct5') or ''
+
 
     return templates.TemplateResponse("index.html", {"request": request,
                                                      "managers": managers,
-                                                     "accounts": accounts,
-                                                     "actuals": actuals,
+                                                     # "accounts": accounts,
+                                                     # "actuals": actuals,
                                                      "acct5_filter": acct5_filter,
                                                      **request.state.context
                                                      }
@@ -218,8 +237,7 @@ def budgets_page(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
     managers = crud.list_managers(db)
-    accounts = crud.list_accounts(db)
-    return templates.TemplateResponse("budgets.html", {"request": request, "accounts": accounts, "managers": managers, **request.state.context})
+    return templates.TemplateResponse("budgets.html", {"request": request, "managers": managers, **request.state.context})
 
 @app.get("/assign", response_class=HTMLResponse)
 def assign_page(request: Request, db: Session = Depends(get_db)):
@@ -228,8 +246,20 @@ def assign_page(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
 
     managers = crud.list_managers(db)
-    accounts = crud.list_accounts(db)
-    return templates.TemplateResponse("assign.html", {"request": request, "managers": managers, "accounts": accounts, **request.state.context})
+    # accounts = crud.list_accounts(db)
+    # for a in accounts:
+    #     a.mgrs = None
+    #     am = api.get_managers_for_account(a.key, db)
+    #     if am:
+    #         a.mgrs = am
+
+    return templates.TemplateResponse("assign.html",
+                                      {
+                                          "request": request,
+                                          "managers": managers,
+                                          # "accounts": accounts,
+                                          **request.state.context
+                                      })
 
 # ---- Managers CRUD (single-record writes) ----
 @app.post("/managers/create")
@@ -249,8 +279,8 @@ def managers_edit_get(id: str, request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("managers.html", {"request": request, "managers": managers, "edit_manager": edit_manager, **request.state.context})
 
 @app.post("/managers/edit/{id}")
-def managers_edit_post(id: str, name: str = Form(...), isdefault: str = Form(''), db: Session = Depends(get_db)):
-    crud.update_manager(db, id, schemas.ManagerBase(name=name), isdefault=isdefault)
+def managers_edit_post(id: str, name: str = Form(...), isdefault: str = Form(''), isadmin: str = Form(''), db: Session = Depends(get_db)):
+    crud.update_manager(db, id, schemas.ManagerBase(name=name), isdefault=isdefault, isadmin=isadmin)
     return RedirectResponse("/managers", status_code=status.HTTP_303_SEE_OTHER)
 
 # ---- Accounts CRUD ----
@@ -397,7 +427,7 @@ def actuals_import(db: Session = Depends(get_db)):
         return RedirectResponse(f"/actuals?msg={msg}", status_code=303)
     return RedirectResponse(f"/actuals?created={created}&total={total}", status_code=303)
 
-@app.get("/api/get/gl-list", response_model=dict)
+@app.get("misc/get/gl-list", response_model=dict)
 def test1():
     from data import Data
     d = Data()
@@ -413,10 +443,17 @@ def accounts_assign(payload: dict = Body(...), db: Session = Depends(get_db)):
         return JSONResponse({"ok": False, "error": "No account IDs provided"}, status_code=400)
     assigned = 0
     for aid in account_ids:
-        acc = crud.get_account(db, aid)
-        if not acc:
-            continue
-        acc.manager_id = manager_id or None
+        # lookup GL for aid
+        glkey = crud.get_account_glkey(db, aid)
+        acct_mgrs_rec = crud.get_acct_mgr_by_key_mgr(db, glkey, manager_id)
+        if acct_mgrs_rec:
+            # remove existing acct_mgrs record
+            crud.delete_acct_mgr(db, acct_mgrs_rec.id)
+        else:
+            # create acct_mgrs record
+            acct_mgr = schemas.AcctMgrCreate(id=uuid4(), key=glkey, manager_id=manager_id)
+            crud.create_acct_mgr(db, acct_mgr)
+
         assigned += 1
     if assigned:
         db.commit()
@@ -450,34 +487,34 @@ def actuals_page(request: Request, db: Session = Depends(get_db)):
     accounts = crud.list_accounts(db)
     return templates.TemplateResponse("actuals.html", {"request": request, "managers": managers, "accounts": accounts, **request.state.context})
 
-@app.get("/api/actual-items")
-def api_actual_items(request: Request, db: Session = Depends(get_db)):
-    qp = request.query_params
-    acct5_filter = qp.get('acct5') or None
-    desc_filter = qp.get('description') or None
-    vendor_filter = qp.get('vendor') or None
-    manager_filter = qp.get('manager') or None
-    items = build_actual_items(db, acct5_filter, desc_filter, vendor_filter, manager_filter)
-    return JSONResponse(content=items)
-
-@app.get("/api/line-items")
-def api_line_items(request: Request, db: Session = Depends(get_db)):
-    qp = request.query_params
-    acct5_filter = qp.get('acct5') or None
-    desc_filter = qp.get('description') or None
-    manager_filter = qp.get('manager') or None
-    items = build_line_items(db, acct5_filter, desc_filter, manager_filter)
-    return JSONResponse(content=items)
-
-@app.get("/api/budget-items")
-def api_budget_items(request: Request, db: Session = Depends(get_db)):
-    qp = request.query_params
-    acct5_filter = qp.get('acct5') or None
-    desc_filter = qp.get('description') or None
-    manager_filter = qp.get('manager') or None
-    items = build_budget_items(db, acct5_filter, desc_filter, manager_filter)
-    return JSONResponse(content=items)
-
+# @app.get("/misc/actual-items")
+# def api_actual_items(request: Request, db: Session = Depends(get_db)):
+#     qp = request.query_params
+#     acct5_filter = qp.get('acct5') or None
+#     desc_filter = qp.get('description') or None
+#     vendor_filter = qp.get('vendor') or None
+#     manager_filter = qp.get('manager') or None
+#     items = build_actual_items(db, acct5_filter, desc_filter, vendor_filter, manager_filter)
+#     return JSONResponse(content=items)
+#
+# @app.get("/misc/line-items")
+# def api_line_items(request: Request, db: Session = Depends(get_db)):
+#     qp = request.query_params
+#     acct5_filter = qp.get('acct5') or None
+#     desc_filter = qp.get('description') or None
+#     manager_filter = qp.get('manager') or None
+#     items = build_line_items(db, acct5_filter, desc_filter, manager_filter)
+#     return JSONResponse(content=items)
+#
+# @app.get("/misc/budget-items")
+# def api_budget_items(request: Request, db: Session = Depends(get_db)):
+#     qp = request.query_params
+#     acct5_filter = qp.get('acct5') or None
+#     desc_filter = qp.get('description') or None
+#     manager_filter = qp.get('manager') or None
+#     items = build_budget_items(db, acct5_filter, desc_filter, manager_filter)
+#     return JSONResponse(content=items)
+#
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 
@@ -546,10 +583,9 @@ async def login_post(request: Request):
 
     load_dotenv()  # Ensure .env is loaded for environment variables
     api_url = os.getenv("AUTH_API", None)
-    admin_groups = os.getenv("AUTH_ADMIN_GROUPS", "").split(",")
-    mgr_groups = os.getenv("AUTH_MGR_GROUPS", "").split(",")
+    app_groups = os.getenv("AUTH_GROUPS", "").split(",")
 
-    if not api_url or not admin_groups or not mgr_groups:
+    if not api_url or not app_groups:
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Authentication API not configured"},
@@ -570,7 +606,7 @@ async def login_post(request: Request):
     #
     # for each admin group, try to authenticate
     #
-    for group in admin_groups:
+    for group in app_groups:
         if not group.strip():
             continue
         url = f"{api_url}/{group.strip()}"
@@ -580,27 +616,7 @@ async def login_post(request: Request):
         if response.status_code == 200:
             # Authentication successful
             token = create_session_token(username)
-            isAdmin = "1"
-            isMgr = "0"
             match_found = True
-
-    if not match_found:
-        #
-        # for each mgr group, try to authenticate
-        #
-        for group in mgr_groups:
-            if not group.strip():
-                continue
-            url = f"{api_url}/{group.strip()}"
-            headers = {"Content-Type": "application/json"}
-            body = {"username": username, "password": password}
-            response = requests.post(url, json=body, headers=headers)
-            if response.status_code == 200:
-                # Authentication successful
-                token = create_session_token(username)
-                isAdmin = "0"
-                isMgr = "1"
-                match_found = True
 
     response = RedirectResponse(url="/", status_code=status.HTTP_302_FOUND)
     if match_found:
@@ -608,7 +624,7 @@ async def login_post(request: Request):
         try:
             from db import SessionLocal
             db = SessionLocal()
-            from crud import get_manager_id_by_name
+            from crud import get_manager_id_by_name, get_manager
             mgr = get_manager_id_by_name(db, username)
             if mgr:
                 uid =  encode64(mgr)
@@ -625,20 +641,6 @@ async def login_post(request: Request):
         response.set_cookie(
             key="user",
             value=user64,
-            httponly=False,
-            max_age=86400,
-            path="/",
-        )
-        response.set_cookie(
-            key="isAdmin",
-            value=isAdmin,
-            httponly=False,
-            max_age=86400,
-            path="/",
-        )
-        response.set_cookie(
-            key="isMgr",
-            value=isMgr,
             httponly=False,
             max_age=86400,
             path="/",

@@ -29,24 +29,33 @@ function fmtAcctNum(value) {
     return result;
 }
 
-function fmtRJColumn(value, signChar = '$') {
+function fmtRJColumn(value, currencyChar = ' ') {
     // Right-justified column format with $ sign to left.
     const actual = fmtAcctNum(value);
     let rightChar = '&nbsp;';
     let result = '';
+    let currencyText = '';
 
-    result += `<span style="display: flex; justify-content: space-between; width:100%;">`;
     if (actual === '-') {
-        sign = '&nbsp;';
+        currencyText = '&nbsp;';
     } else {
-        sign = '&nbsp;' + signChar;
+        currencyText = '&nbsp;' + currencyChar;
     }
     // if last character of actual is ")", then set rightChar to ''
     if (actual.endsWith(')')) {
         rightChar = '';
     }
-    result += `<span style="text-align: left;">${sign}</span>`;
-    result += `<span style="text-align: right; flex:1;">${actual}${rightChar}</span>`;
-    result += `</span>`;
+
+    if ( currencyChar === null || currencyChar === ' ' || currencyChar === '') {
+        result += `<span style="display: flex; justify-content: space-between; width:100%;">`;
+        result += `<span style="text-align: right; flex:1;">${actual}${rightChar}</span>`;
+        result += `</span>`;
+    } else {
+        result += `<span style="display: flex; justify-content: space-between; width:100%;">`;
+        result += `<span style="text-align: left;">${currencyText}</span>`;
+        result += `<span style="text-align: right; flex:1;">${actual}${rightChar}</span>`;
+        result += `</span>`;
+    }
+
     return result;
 }

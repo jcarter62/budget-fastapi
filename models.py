@@ -6,18 +6,22 @@ class Manager(Base):
     __tablename__ = "managers"
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    isdefault = Column(String, nullable=False, default='off')  # 'on' or 'off'
-
-    accounts = relationship("Account", back_populates="manager")
+    isdefault = Column(String, nullable=False, default='Off')  # 'on' or 'off'
+    isadmin = Column(String, nullable=False, default='No')     # 'Yes' or 'No'
 
 class Account(Base):
     __tablename__ = "accounts"
     id = Column(String, primary_key=True, index=True)
     key = Column(String, unique=True, nullable=False, index=True)  # '52100-03-31-01-01'
     description = Column(String, nullable=False)
-    manager_id = Column(String, ForeignKey("managers.id"), nullable=True)
+    # manager_id = Column(String, ForeignKey("managers.id"), nullable=True)
 
-    manager = relationship("Manager", back_populates="accounts")
+class AcctMgr(Base):
+    __tablename__ = "acct_mgrs"
+    id = Column(String, primary_key=True, index=True)
+    # make this a foreign key to accounts.key
+    key = Column(String, nullable=False)  # '52100-03-31-01-01' GL account key
+    manager_id = Column(String, ForeignKey("managers.id"), nullable=False)
 
 class BudgetItem(Base):
     __tablename__ = "budget_items"

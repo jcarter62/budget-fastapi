@@ -18,7 +18,7 @@ class ContextProcessorMiddleware(BaseHTTPMiddleware):
 
         auth = {
             "is_authenticated": auth_instance.is_authenticated(),
-            "is_admin": auth_instance.is_admin(),
+            "is_admin": auth_instance.is_admin,
             "is_manager": auth_instance.is_manager(),
             "user_id": auth_instance.user_id,
             "username": auth_instance.username,
@@ -29,7 +29,17 @@ class ContextProcessorMiddleware(BaseHTTPMiddleware):
             "auth": auth,
         }
 
+
+
         response: Response = await call_next(request)
+
+        if auth_instance.is_admin:
+            response.set_cookie(key="isAdmin", value="1", path="/", httponly=False, secure=False)
+        else:
+            response.delete_cookie(key="isAdmin", path="/")
+
+
+
         # If this is a TemplateResponse (FastAPI/Starlette adds 'context') ensure appname exists
         if hasattr(response, "context") and isinstance(getattr(response, "context", None), dict):
             response.context.setdefault("appname", request.state.context["appname"])

@@ -24,13 +24,8 @@
     <div class="mb-4 flex flex-wrap gap-4 items-end">
         <div>
             <label for="filter-gl" class="block text-sm font-medium">GL</label>
-            <select id="filter-gl" class="border rounded px-2 py-1">
-                <option value="">All</option>
-                {% for a in accounts %}
-                <option value="{{a.key}}">{{a.key}} - {{a.description}}</option>
-                {% endfor %}
-            </select>
-
+            <input type="text" id="filter-gl" class="border rounded px-2 py-1"
+                   value={{acct5_filter}} list="gl-options">
         </div>
         <div>
             <label for="filter-desc" class="block text-sm font-medium">Description</label>
@@ -41,7 +36,7 @@
             <select id="filter-manager" class="admin-control border rounded px-2 py-1">
                 <option value="">All</option>
                 {% for m in managers %}
-                    <option value="{{m.id}}">{{m.name}}</option>
+                <option value="{{m.id}}">{{m.name}}</option>
                 {% endfor %}
             </select>
         </div>
@@ -51,7 +46,7 @@
         <thead>
         <tr class="font-mono">
             <th style="text-align: left;">GL</th>
-            <th style="text-align: left;">Line</th>
+            <!--            <th style="text-align: left;">Line</th>-->
             <th style="text-align: right;">Budget&nbsp;</th>
             <th style="text-align: right;">Actual&nbsp;</th>
             <th style="text-align: right;">Variance&nbsp;</th>
@@ -66,9 +61,15 @@
 <script src="/static/js/formatting.js"></script>
 
 <script>
+
+    function showGLDetail(gl) {
+        // set local storage search parameter for /actuals url
+        localStorage.setItem('actuals.filterGL', gl);
+        window.location.href = '/actuals';
+    }
+
     window.addEventListener('DOMContentLoaded', function () {
         var spinner = document.getElementById('please-wait-spinner');
-        var table = document.getElementById('items-table');
         var tbody = document.getElementById('items-tbody');
         var filterGL = document.getElementById('filter-gl');
         var filterDesc = document.getElementById('filter-desc');
@@ -76,9 +77,28 @@
         var clearBtn = document.getElementById('clear-filters');
         // Get account manager mapping for filtering
         var accountManagerMap = {};
-        {% for a in accounts %}
-            accountManagerMap["{{a.key}}"] = "{{a.manager_id or ''}}";
-        {% endfor %}
+
+        // load accountManagerMap using api:
+        // /api/managers-for-accounts
+        let url = "/api/managers-for-accounts";
+        fetch(url)
+            .then(function (response) {
+                return response.json();
+            })
+            .then(function (data) {
+                data.forEach(function (item) {
+                    let key = item.key;
+                    let mgr = item.name;
+                    let thisMgr = accountManagerMap[key] || '';
+                    if (thisMgr > '') {
+                        mgr = thisMgr + "," + mgr;
+                    }
+                    accountManagerMap[key] = mgr;
+                });
+            })
+            .catch(function (err) {
+                console.error('Failed to load account-manager mapping:', err);
+            });
 
         // Save/restore filters
         function saveFilters() {
@@ -110,26 +130,22 @@
                 let managerId = accountManagerMap[r.acct5] || '';
                 let tr = document.createElement('tr');
                 tr.className = 'border-b';
-                tr.setAttribute('data-manager-id', managerId);
                 let actual = fmtRJColumn(r.actual);
                 let budget = fmtRJColumn(r.budget);
                 let variance = fmtRJColumn(r.variance);
 
-                tr.innerHTML = `
-        <td class="py-1 font-mono">${r.acct5}</td>
-        <td class="font-mono">${r.line}</td>
-        <td class="font-mono" style="padding-right: 0;" >${budget}</td>
-        <td class="font-mono" style="padding-right: 0;" >${actual}</td>
-        <td class="${r.variance >= 0 ? 'text-green-700' : 'text-red-700'} font-semibold font-mono" style="padding-right: 0;" >${variance}</td>
-        <td>&nbsp;${r.budget_desc || ''}</td>
-      `;
+                tr.innerHTML = `<td class="py-1 font-mono onclick-link" onclick="showGLDetail('${r.account}');">${r.account}</td>`;
+                tr.innerHTML += `<td class="font-mono" style="padding-right: 0;" >${budget}</td>`;
+                tr.innerHTML += `<td class="font-mono" style="padding-right: 0;" >${actual}</td>`;
+                tr.innerHTML += `<td class="${r.variance >= 0 ? 'text-green-700' : 'text-red-700'} font-semibold font-mono" style="padding-right: 0;" >${variance}</td>`;
+                tr.innerHTML += `<td>&nbsp;${r.description || ''}</td>`;
                 tbody.appendChild(tr);
             });
         }
 
         function fetchAndRender() {
             if (spinner) spinner.style.display = '';
-            var url = '/api/line-items' + buildQuery();
+            var url = '/api/home-items' + buildQuery();
             fetch(url)
                 .then(function (response) {
                     return response.json();
@@ -160,7 +176,7 @@
         clearBtn.addEventListener('click', function () {
             filterGL.value = '';
             filterDesc.value = '';
-            if ( userRole === 'admin' ) {
+            if (userRole === 'admin') {
                 filterManager.value = '';
             }
             saveFilters();

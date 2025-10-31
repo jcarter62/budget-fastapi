@@ -66,18 +66,16 @@
         <thead>
         <tr class="text-left border-b">
             <th class="py-1">GL</th>
-            <th>Line</th>
             <th style="text-align: right;">Budget&nbsp;</th>
             <th>&nbsp;Description</th>
-            <th>Manager</th>
-            <th>
-              <span>
-                <img src="/static/plus-square-solid.svg" height="10" width="10">
-                <img src="/static/minus-square-solid.svg" height="10" width="10">
-                <img src="/static/pen-square-solid.svg" height="10" width="10">
-              </span>
-            </th>
-            <th>&nbsp;</th>
+<!--            <th>-->
+<!--              <span>-->
+<!--                <img src="/static/plus-square-solid.svg" height="10" width="10">-->
+<!--                <img src="/static/minus-square-solid.svg" height="10" width="10">-->
+<!--                <img src="/static/pen-square-solid.svg" height="10" width="10">-->
+<!--              </span>-->
+<!--            </th>-->
+<!--            <th>&nbsp;</th>-->
         </tr>
         </thead>
         <tbody id="budget-tbody">
@@ -87,29 +85,29 @@
 </div>
 
 <!-- Add a modal dialog for adding GL lines -->
-<div id="add-gl-line-modal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center">
-    <div class="bg-white p-6 rounded shadow-md w-96">
-        <h2 class="text-lg font-semibold mb-4" id="addGlLineForm">Add GL Line</h2>
-        <form id="add-gl-line-form">
-            <div class="mb-4">
-                <label for="line-number" class="block text-sm font-medium">Line Number</label>
-                <input disabled id="line-number" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter line number (e.g., 01)" required>
-            </div>
-            <div class="mb-4">
-                <label for="budget-amount" class="block text-sm font-medium">Budget Amount</label>
-                <input id="budget-amount" type="number" class="border rounded px-2 py-1 w-full" placeholder="Enter budget amount" required>
-            </div>
-            <div class="mb-4">
-                <label for="description" class="block text-sm font-medium">Description</label>
-                <input id="description" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter description (optional)">
-            </div>
-            <div class="flex justify-end gap-2">
-                <button type="button" id="cancel-add-gl-line" class="px-4 py-2 bg-gray-200 rounded">Cancel</button>
-                <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">Add</button>
-            </div>
-        </form>
-    </div>
-</div>
+<!--<div id="add-gl-line-modal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center">-->
+<!--    <div class="bg-white p-6 rounded shadow-md w-96">-->
+<!--        <h2 class="text-lg font-semibold mb-4" id="addGlLineForm">Add GL Line</h2>-->
+<!--        <form id="add-gl-line-form">-->
+<!--            <div class="mb-4">-->
+<!--                <label for="line-number" class="block text-sm font-medium">Line Number</label>-->
+<!--                <input disabled id="line-number" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter line number (e.g., 01)" required>-->
+<!--            </div>-->
+<!--            <div class="mb-4">-->
+<!--                <label for="budget-amount" class="block text-sm font-medium">Budget Amount</label>-->
+<!--                <input id="budget-amount" type="number" class="border rounded px-2 py-1 w-full" placeholder="Enter budget amount" required>-->
+<!--            </div>-->
+<!--            <div class="mb-4">-->
+<!--                <label for="description" class="block text-sm font-medium">Description</label>-->
+<!--                <input id="description" type="text" class="border rounded px-2 py-1 w-full" placeholder="Enter description (optional)">-->
+<!--            </div>-->
+<!--            <div class="flex justify-end gap-2">-->
+<!--                <button type="button" id="cancel-add-gl-line" class="px-4 py-2 bg-gray-200 rounded">Cancel</button>-->
+<!--                <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded">Add</button>-->
+<!--            </div>-->
+<!--        </form>-->
+<!--    </div>-->
+<!--</div>-->
 
 <script src="/static/js/formatting.js"></script>
 
@@ -150,7 +148,7 @@
 
         function buildQuery() {
             var params = [];
-            // Remove acct5 exact filtering from server query; we do contains filtering client-side now
+            if (filterGL.value) params.push('acct5=' + encodeURIComponent(filterGL.value));
             if (filterDesc.value) params.push('description=' + encodeURIComponent(filterDesc.value));
             if (filterManager.value) params.push('manager=' + encodeURIComponent(filterManager.value));
             return params.length ? ('?' + params.join('&')) : '';
@@ -163,36 +161,13 @@
                 return;
             }
             items.forEach(function (r) {
-                // Create table row with id = ${r.acct5}-${r.line}
-
                 let tr = document.createElement('tr');
                 tr.id = `${r.acct5}-${r.line}`;
 
                 tr.className = 'border-b';
-                if (r.line === '00') {
-                    tr.innerHTML = `
-                        <td class="py-1 font-mono">${r.acct5}</td>
-                        <td class="font-mono">${r.line}</td>
-                        <td class="font-mono" style="padding-right: 0;"> ${fmtRJColumn(r.budget)}</td>
-                        <td>&nbsp;${r.budget_desc || ''}</td>
-                        <td>${managerMap[r.manager_id] || ''}</td>
-                        <td>
-                            <img onclick="addGlLine('${r.acct5}');" src="/static/plus-square-solid.svg" height="16" width="16">
-                        </td><td>&nbsp;</td>`;
-                } else {
-                    tr.innerHTML = `
-                        <td class="py-1 font-mono">&nbsp;</td>
-                        <td class="font-mono">${r.line}</td>
-                        <td class="font-mono" style="padding-right: 0;"> ${fmtRJColumn(r.budget)}</td>
-                        <td>&nbsp;${r.budget_desc || ''}</td>
-                        <td>&nbsp;</td>
-                        <td>
-                            <img onclick="editGlLine('${r.acct5}', '${r.line}');" src="/static/pen-square-solid.svg" height="16" width="16">
-                        </td>
-                        <td>
-                            <img onclick="deleteGlLine('${r.acct5}', '${r.line}');" src="/static/minus-square-solid.svg" height="16" width="16">
-                        </td>`;
-                }
+                tr.innerHTML = `<td class="py-1 font-mono">${r.account}</td>`;
+                tr.innerHTML += `<td class="font-mono" style="padding-right: 0;"> ${fmtRJColumn(r.budget)}</td>`;
+                tr.innerHTML += `<td>&nbsp;${r.description || ''}</td>`;
                 tbody.appendChild(tr);
             });
         }
@@ -206,15 +181,7 @@
                     return response.json();
                 })
                 .then(function (data) {
-                    // Client-side contains filtering for GL
-                    var gl = (filterGL.value || '').toLowerCase();
-                    var filtered = data;
-                    if (gl) {
-                        filtered = data.filter(function (r) {
-                            return (r.acct5 || '').toLowerCase().indexOf(gl) !== -1;
-                        });
-                    }
-                    renderRows(filtered);
+                    renderRows(data);
                     if (spinner) spinner.style.display = 'none';
                 })
                 .catch(function (err) {

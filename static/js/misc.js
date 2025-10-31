@@ -75,9 +75,8 @@ document.addEventListener('DOMContentLoaded', function() {
         logoutLink.style.display = 'none';
     }
 
-
     // if user is manager, then lookup manager id, and save to local storage
-    if (userRole === 'manager') {
+    if (userRole != 'admin') {
         fetch('/api/managers/get_manager_id/' + userName, {
             method: 'POST',
             headers: {

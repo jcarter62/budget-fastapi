@@ -8,7 +8,7 @@ dbpath = os.getenv("BUDGET_DB_PATH", "./budget.db")
 SQLALCHEMY_DATABASE_URL = "sqlite:///" + dbpath
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL, pool_size=20, max_overflow=-1, connect_args={"check_same_thread": False}
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

@@ -1,5 +1,9 @@
 import base64
 from fastapi import Request
+import os
+import db
+from sqlalchemy.orm import Session
+import crud
 
 class Auth:
     def __init__(self, request: Request):
@@ -7,6 +11,24 @@ class Auth:
         self.session = ''
         self.username = self.decrypt_key(key='user')
         self.user_id = self.decrypt_key(key='uid')
+        self.dbpath = os.environ.get("DB_PATH", "app.db")
+        self.is_admin = self.get_admin_status()
+
+    # get user info from sqlite database managers table
+    def get_user_info(self, userid: str):
+        result = None
+        try:
+            db_session: Session = next(db.get_db())
+            user_info = crud.get_manager(db_session, userid)
+            result = {
+                "id": user_info.id,
+                "name": user_info.name,
+                "is_admin": user_info.isadmin,
+                "is_default": user_info.isdefault,
+            }
+        except Exception as e:
+            print(f"Err:auth.get_user_info: {e}")
+        return result
 
     def decrypt_key(self, key:str)->str:
         keyval = self.req.cookies.get(key)
@@ -23,12 +45,22 @@ class Auth:
             return False
         return True
 
-    def is_admin(self) -> bool:
+    def get_admin_status(self) -> bool:
         """Return True if the current session cookie corresponds to an admin user."""
-        if not self.is_authenticated():
-            return False
-        is_admin = self.req.cookies.get("isAdmin")
-        return is_admin == "1"
+        result = False
+
+        if self.is_authenticated():
+            # determine if current user is admin
+            try:
+                user_info = self.get_user_info(self.user_id)
+                if user_info and (user_info['is_admin'] == 'on'):
+                    result = True
+            except Exception as e:
+                print(f"Err:auth.is_admin: {e}")
+
+        print(f"user: {self.username} - Admin: {result}")
+        return result
+
 
     def is_manager(self) -> bool:
         """Return True if the current session cookie corresponds to a manager user."""

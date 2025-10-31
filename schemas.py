@@ -3,6 +3,8 @@ from typing import Optional
 
 class ManagerBase(BaseModel):
     name: str = Field(..., min_length=1)
+    isadmin: Optional[str] = Field('No', min_length=1)
+
 
 class ManagerCreate(ManagerBase):
     id: str
@@ -42,3 +44,8 @@ class LineItem(LineItemBase):
     id: str
     class Config:
         from_attributes = True
+
+class AcctMgrCreate(BaseModel):
+    id: str
+    key: str
+    manager_id: str
